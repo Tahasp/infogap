@@ -81,6 +81,7 @@ def step_retrieve_prescraped_en_content_blocks(en_bio_id,
 
 def step_retrieve_prescraped_ru_content_blocks(tgt_bio_id, **kwargs):
     try: 
+        
         with open(f"{BIO_SAVE_DIR}/{tgt_bio_id}_ru.pkl", 'rb') as f:
             return dill.load(f)
     except FileNotFoundError:
@@ -107,6 +108,22 @@ def remove_person_specific_blocks_fr(fr_bio_id, content_blocks):
         return content_blocks[:prix_et_recompenses_index]
     else:
         return content_blocks
+
+# def remove_person_specific_blocks_zh(fr_bio_id, content_blocks):
+#     if fr_bio_id == 'Abdellah_Taïa':
+#         # filter out paragraph after "Sur quelques ouvrages > La vie lente"
+#         sur_quelques_ouvrages_header_index = [i for i, block in enumerate(content_blocks) if isinstance(block, Header) and block.text == "Sur quelques ouvrages"][0] 
+#         return content_blocks[:sur_quelques_ouvrages_header_index]
+#     elif fr_bio_id == 'Frédéric_Mitterrand':
+#         s = 'prix et récompenses suivants'
+#         # filter out paragraph including and after "prix et récompenses suivants"
+#         prix_et_recompenses_index = [i for i, block in enumerate(content_blocks) if isinstance(block, Paragraph) and s in block.clean_text][0]
+#         return content_blocks[:prix_et_recompenses_index]
+#     else:
+#         return content_blocks
+
+
+
 
 def step_retrieve_fr_content_blocks(fr_bio_id: str, 
                                  **kwargs) -> List[Union[Header, Paragraph]]:
@@ -151,6 +168,48 @@ def step_retrieve_fr_content_blocks(fr_bio_id: str,
     logger.info(f"BBBBlocks remaining after person-specific filtering: {len(content_blocks)}")
     content_blocks = list(filter(lambda x: not (isinstance(x, Paragraph) and len(x.clean_text.split()) < 6), content_blocks)) # filter out paragraphs where the clean_text attribute string has fewer than 6 words.
     return content_blocks
+
+
+
+def step_retrieve_zh_content_blocks(zh_bio_id: str, 
+                                 **kwargs) -> List[Union[Header, Paragraph]]:
+    chinese_id = zh_bio_id
+    zh_link = f"https://zh.wikipedia.org/wiki/{chinese_id}"
+    content_blocks = get_text(zh_link, 'zhwiki')
+    logger.info(f"Retrieved {len(content_blocks)} paragraphs from {zh_link}")
+    num_blocks_orig = len(content_blocks)
+   
+    logger.info(f"Total content blocks before filtering: {len(content_blocks)}")
+    try:
+        logger.info("Checking for '参见' section in content_blocks...")
+        for block in content_blocks:
+            logger.info(f"Block type: {type(block)}, Attributes: {dir(block)}")
+        if any([isinstance(block, Header) and block.clean_text == "参见" for block in content_blocks]):
+            logger.info("'参见' section found. Attempting to locate and process it.")
+            # Attempt to find the '参见' header
+            voir_aussi_header = next(
+                filter(lambda x: isinstance(x, Header) and x.clean_text == "参见", content_blocks)
+            )
+            # Attempt to find the index of the header
+            voir_aussi_index = content_blocks.index(voir_aussi_header)
+            logger.info(f"'参见' section found at index {voir_aussi_index}.")
+            
+            # Filter out content blocks after the '参见' section
+            content_blocks = content_blocks[:voir_aussi_index]
+            logger.info(f"'参见' section removed. Blocks remaining: {len(content_blocks)}")
+        else:
+            logger.info("'参见' section not found. No blocks removed.")
+    except StopIteration as e:
+        logger.error("Error: '参见' header not found but was expected. Check content_blocks.", exc_info=True)
+    except ValueError as e:
+        logger.error("Error: Unable to find index for '参见' header. Possible mismatch in content_blocks.", exc_info=True)
+    except Exception as e:
+        logger.error(f"Unexpected error while processing '参见' section: {e}", exc_info=True)
+    # content_blocks = remove_person_specific_blocks_zh(zh_bio_id, content_blocks)
+    # logger.info(f"BBBBlocks remaining after person-specific filtering: {len(content_blocks)}")
+    content_blocks = list(filter(lambda x: not (isinstance(x, Paragraph) and len(x.clean_text) < 6), content_blocks)) # filter out paragraphs where the clean_text attribute string has fewer than 6 words.
+    return content_blocks
+
 
 def step_retrieve_ru_content_blocks(ru_bio_id: str, 
                                     **kwargs): 
