@@ -3,10 +3,9 @@ import numpy as np
 import ipdb
 import polars as pl
 from collections import OrderedDict
-from flowmason import conduct, SingletonStep, load_artifact_with_step_name, MapReduceStep, load_mr_artifact
+from flowmason.flowmason import conduct, SingletonStep, load_artifact_with_step_name, MapReduceStep, load_mr_artifact
 import click
 import os
-import numpy as np
 from tqdm import tqdm
 from sklearn.metrics import classification_report
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -25,6 +24,11 @@ from packages.flan_query import ask_flan_about_fact_intersection, ask_mt5_about_
 # from packages.constants import ANNOTATION_SAVE_PATH, NUM_CONTEXT_SRC, NUM_CONTEXT_TGT, NUM_RETRIEVALS
 from packages.constants import NUM_CONTEXT_SRC, NUM_CONTEXT_TGT, NUM_RETRIEVALS, SCRATCH_DIR, CURRENT_EN_BIO_IDS, CURRENT_FR_BIO_IDS, CURRENT_PERSON_NAMES, ANNOTATION_SAVE_PATH, EN_FR_BIO_NAME_CSVS,\
     EN_RU_BIO_NAME_CSV
+try:
+    from numpy import AxisError
+except ImportError:
+    class AxisError(ValueError):
+        pass
 
 logger = loguru.logger
 def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, **kwargs) -> pl.DataFrame:
@@ -112,13 +116,13 @@ def execute_complete_gpt():
 
     # reduce_info_gaps,
     # 'fr_bio_id',
-    # [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, np.AxisError]
+    # [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint]
 
     # TODO: need to watch out for the Abdellah bio since its french wikipedia page is a little weird 
     # TODO: need to log the total number of tokens for the queries somewhere/somehow
         # reduce_info_gaps,
         # 'fr_bio_id',
-        # [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, np.AxisError]
+        #[BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, np.AxisError]
     full_map_dict['map_step_compute_info_gap'] = MapReduceStep(info_gap_map_dict, 
         {
             'en_bio_id': ["Gabriel_Attal"],
@@ -130,7 +134,7 @@ def execute_complete_gpt():
         }, 
         reduce_info_gaps, 
         'fr_bio_id',
-        [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, np.AxisError]
+        [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, AxisError]
     )
     full_map_dict['map_step_compute_connotations'] = MapReduceStep(caa_map_dict,
         {
@@ -199,7 +203,7 @@ def execute_complete_flan(start_index: int, end_index: int):
         }, 
         reduce_info_gaps,
         'fr_bio_id',
-        [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, np.AxisError]
+        [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint]
     )
     full_map_dict['map_step_compute_connotations'] = MapReduceStep(caa_map_dict,
         {

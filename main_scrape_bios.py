@@ -16,7 +16,7 @@ from functools import partial
 import loguru
 
 from wikipedia_edit_scrape_tool import get_multilingual_wikilinks_mediawiki, Paragraph, DisambiguationPageError, Header, get_category
-from flowmason import conduct, load_artifact, load_artifact_with_step_name, SingletonStep
+from flowmason.flowmason import conduct, load_artifact, load_artifact_with_step_name, SingletonStep
 
 import loguru
 from packages.steps.info_diff_steps import step_retrieve_en_content_blocks,\
@@ -196,6 +196,7 @@ def step_load_ru_bios(en_ru_bio_id_names: List[Tuple[str,str,str, str]], **kwarg
 
 
 def step_load_bios(en_fr_bio_ids_names: List[Tuple[str,str]], **kwargs):
+    logger.info(f"Processing bio IDs: {en_fr_bio_ids_names}")
     en_bio_ids = [en_bio_id for en_bio_id, _, _ in en_fr_bio_ids_names]
     fr_bio_ids = [fr_bio_id for _, fr_bio_id, _ in en_fr_bio_ids_names]
     # create BIO_SAVE_DIR if it doesn't exist
@@ -209,17 +210,24 @@ def step_load_bios(en_fr_bio_ids_names: List[Tuple[str,str]], **kwargs):
     for i in range(len(en_bio_ids)):
         en_bio_id = en_bio_ids[i]
         fr_bio_id = fr_bio_ids[i]
+
         # check if the bio_id has already been processed. TODO: UNCOMMENT LATER
         if os.path.exists(f'{BIO_SAVE_DIR}/{en_bio_id}_en.pkl') and os.path.exists(f'{BIO_SAVE_DIR}/{fr_bio_id}_fr.pkl'):
             progress.update(1)
             continue
         try:
+            logger.info(f"Retrieving content blocks for {en_bio_id} and {fr_bio_id}")
             en_blocks = step_retrieve_en_content_blocks(en_bio_id)
-            fr_blocks = step_retrieve_fr_content_blocks(fr_bio_id)
+            logger.info(f"Successfully retrieved {len(en_blocks)} paragraphs for {en_bio_id}")
             with open(f'{BIO_SAVE_DIR}/{en_bio_id}_en.pkl', 'wb') as f:
                 dill.dump(en_blocks, f)
+            logger.info(f"Saved content blocks for {en_bio_id}")
+
+            fr_blocks = step_retrieve_fr_content_blocks(fr_bio_id)
+            logger.info(f"Successfully retrieved {len(fr_blocks)} paragraphs for {fr_bio_id}")
             with open(f'{BIO_SAVE_DIR}/{fr_bio_id}_fr.pkl', 'wb') as f:
                 dill.dump(fr_blocks, f)
+            logger.info(f"Saved content blocks for {en_bio_id}")
         except DisambiguationPageError: 
             logger.error(f"Failed on {en_bio_id} as it is a disambiguation page.")
             failed_bio_ids.append(en_bio_id)
@@ -274,6 +282,9 @@ def step_obtain_target_en_fr_bio_ids(bio_frame, **kwargs):
     en_fr_bio_ids_names = list(zip(en_bio_ids, 
                                    fr_bio_ids, 
                                    person_names ))
+    logger.info(f"{en_fr_bio_ids_names}")
+
+    
     return en_fr_bio_ids_names
 
 def step_obtain_target_en_ru_bio_ids(bio_frame, **kwargs):
