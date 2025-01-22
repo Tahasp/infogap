@@ -16,4 +16,5 @@ dateparser
 loguru
 sentence-transformers
 nltk
+openai
 python-dotenv

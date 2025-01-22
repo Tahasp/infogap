@@ -63,6 +63,8 @@ def step_retrieve_en_content_blocks(en_bio_id: str,
     content_blocks = get_text(en_link, 'enwiki')
     # filter out paragraphs where the clean_text attribute string has fewer than 6 words.
     content_blocks = list(filter(lambda x: not (isinstance(x, Paragraph) and len(x.clean_text.split()) < 6), content_blocks))
+    logger.info(f"Retrieved {len(content_blocks)} paragraphs from {en_link}")
+
     return content_blocks 
 
 class BioFilenotFoundError(Exception):
@@ -111,16 +113,42 @@ def step_retrieve_fr_content_blocks(fr_bio_id: str,
     french_id = fr_bio_id
     fr_link = f"https://fr.wikipedia.org/wiki/{french_id}"
     content_blocks = get_text(fr_link, 'frwiki')
+    logger.info(f"Retrieved {len(content_blocks)} paragraphs from {fr_link}")
     num_blocks_orig = len(content_blocks)
     # voir_aussi_header = next(filter(lambda x: isinstance(x, Header) and x.text == "Voir aussi" , content_blocks))
     # check if content blocks has voir aussi header
-    if any([isinstance(block, Header) and block.text == "Voir aussi" for block in content_blocks]):
-        voir_aussi_header = next(filter(lambda x: isinstance(x, Header) and x.text == "Voir aussi" , content_blocks))
-        voir_aussi_index = content_blocks.index(voir_aussi_header)
-        content_blocks = content_blocks[:voir_aussi_index]
-        # log that we're omitting the "Voir aussi" section and everything after it
-        logger.info(f"Omitting the 'Voir aussi' section and everything after it for the French Wikipedia page for {fr_bio_id}. This drops {num_blocks_orig - len(content_blocks)} blocks")
+    # if any([isinstance(block, Header) and block.text == "Voir aussi" for block in content_blocks]):
+    #     voir_aussi_header = next(filter(lambda x: isinstance(x, Header) and x.text == "Voir aussi" , content_blocks))
+    #     voir_aussi_index = content_blocks.index(voir_aussi_header)
+    #     content_blocks = content_blocks[:voir_aussi_index]
+    #     # log that we're omitting the "Voir aussi" section and everything after it
+    #     logger.info(f"Omitting the 'Voir aussi' section and everything after it for the French Wikipedia page for {fr_bio_id}. This drops {num_blocks_orig - len(content_blocks)} blocks")
+    logger.info(f"Total content blocks before filtering: {len(content_blocks)}")
+    try:
+        logger.info("Checking for 'Voir aussi' section in content_blocks...")
+        if any([isinstance(block, Header) and block.text == "Voir aussi" for block in content_blocks]):
+            logger.info("'Voir aussi' section found. Attempting to locate and process it.")
+            # Attempt to find the 'Voir aussi' header
+            voir_aussi_header = next(
+                filter(lambda x: isinstance(x, Header) and x.text == "Voir aussi", content_blocks)
+            )
+            # Attempt to find the index of the header
+            voir_aussi_index = content_blocks.index(voir_aussi_header)
+            logger.info(f"'Voir aussi' section found at index {voir_aussi_index}.")
+            
+            # Filter out content blocks after the 'Voir aussi' section
+            content_blocks = content_blocks[:voir_aussi_index]
+            logger.info(f"'Voir aussi' section removed. Blocks remaining: {len(content_blocks)}")
+        else:
+            logger.info("'Voir aussi' section not found. No blocks removed.")
+    except StopIteration as e:
+        logger.error("Error: 'Voir aussi' header not found but was expected. Check content_blocks.", exc_info=True)
+    except ValueError as e:
+        logger.error("Error: Unable to find index for 'Voir aussi' header. Possible mismatch in content_blocks.", exc_info=True)
+    except Exception as e:
+        logger.error(f"Unexpected error while processing 'Voir aussi' section: {e}", exc_info=True)
     content_blocks = remove_person_specific_blocks_fr(fr_bio_id, content_blocks)
+    logger.info(f"BBBBlocks remaining after person-specific filtering: {len(content_blocks)}")
     content_blocks = list(filter(lambda x: not (isinstance(x, Paragraph) and len(x.clean_text.split()) < 6), content_blocks)) # filter out paragraphs where the clean_text attribute string has fewer than 6 words.
     return content_blocks
 
@@ -196,9 +224,29 @@ def write_gpt_fact_cache(person_name, lang_code, fact_cache):
     with open(cache_file, 'w') as f:
         json.dump(fact_cache, f)
 
+# def load_other_client():
+#     key = config['THE_KEY']
+#     client = OpenAI(api_key=key)  # TODO: put this in an env instead.
+#     return client
+
 def load_other_client():
-    key = config['THE_KEY']
-    client = OpenAI(api_key=key)  # TODO: put this in an env instead.
+    # Load configuration from .env
+    config = dotenv_values(".env")
+    
+    # Get the API key from the .env file
+    api_key = config.get('THE_KEY')
+    if not api_key:
+        raise ValueError("Missing THE_KEY in .env file")
+    
+    # Set the Azure endpoint
+    URL_ENDPOINT = "https://ubcnlpgpt4.openai.azure.com/"
+    
+    # Initialize the Azure OpenAI client
+    client = openai.AzureOpenAI(
+        api_key=api_key,
+        api_version="2023-05-15",
+        azure_endpoint=URL_ENDPOINT
+    )
     return client
 
 def extract_fact_decomp_list(response: str) -> List[str]:
