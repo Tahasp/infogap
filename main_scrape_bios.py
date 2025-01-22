@@ -20,7 +20,7 @@ from flowmason.flowmason import conduct, load_artifact, load_artifact_with_step_
 
 import loguru
 from packages.steps.info_diff_steps import step_retrieve_en_content_blocks,\
-    step_retrieve_fr_content_blocks, step_retrieve_ru_content_blocks, step_retrieve_prescraped_en_content_blocks
+    step_retrieve_fr_content_blocks, step_retrieve_zh_content_blocks, step_retrieve_ru_content_blocks, step_retrieve_prescraped_en_content_blocks
 from packages.constants import BIO_SAVE_DIR, SCRATCH_DIR
 
 logger = loguru.logger
@@ -40,6 +40,19 @@ def _get_ruwiki_id(en_bio_id: str) -> str:
         return os.path.basename(wikilinks_dict['ruwiki'])
     else:
         return 'unavailable through mediawiki'
+
+def _get_zhwiki_id(en_bio_id: str, progress: Optional[tqdm.tqdm] = None) -> str:
+    try:
+        wikilinks_dict = get_multilingual_wikilinks_mediawiki(en_bio_id)
+        if progress:
+            progress.update(1)
+        if 'zhwiki' in wikilinks_dict:
+            return os.path.basename(wikilinks_dict['zhwiki'])
+        else:
+            return 'unavailable through mediawiki'
+    except Exception as e:
+        logger.error(f"Error in _get_zhwiki_id for {en_bio_id}: {e}")
+        return 'error'
 
 # TODO: make this a step, since it's a fairly long computation
 def step_load_pairs_common(**kwargs) -> pl.DataFrame:
@@ -240,6 +253,54 @@ def step_load_bios(en_fr_bio_ids_names: List[Tuple[str,str]], **kwargs):
         progress.update(1)
     logger.info(f"The failed bio ids are: {failed_bio_ids}")
 
+
+
+def step_load_zh_bios(en_zh_bio_ids_names: List[Tuple[str,str]], **kwargs):
+    logger.info(f"Processing bio IDs: {en_zh_bio_ids_names}")
+    en_bio_ids = [en_bio_id for en_bio_id, _, _ in en_zh_bio_ids_names]
+    zh_bio_ids = [zh_bio_id for _, zh_bio_id, _ in en_zh_bio_ids_names]
+    # create BIO_SAVE_DIR if it doesn't exist
+    try:
+        os.makedirs(BIO_SAVE_DIR)
+    except FileExistsError:
+        pass
+    progress = tqdm.tqdm(total=len(en_bio_ids))
+
+    failed_bio_ids = []
+    for i in range(len(en_bio_ids)):
+        en_bio_id = en_bio_ids[i]
+        zh_bio_id = zh_bio_ids[i]
+
+        # check if the bio_id has already been processed. TODO: UNCOMMENT LATER
+        if os.path.exists(f'{BIO_SAVE_DIR}/{en_bio_id}_en.pkl') and os.path.exists(f'{BIO_SAVE_DIR}/{zh_bio_id}_zh.pkl'):
+            progress.update(1)
+            continue
+        try:
+            logger.info(f"Retrieving content blocks for {en_bio_id} and {zh_bio_id}")
+            en_blocks = step_retrieve_en_content_blocks(en_bio_id)
+            logger.info(f"Successfully retrieved {len(en_blocks)} paragraphs for {en_bio_id}")
+            with open(f'{BIO_SAVE_DIR}/{en_bio_id}_en.pkl', 'wb') as f:
+                dill.dump(en_blocks, f)
+            logger.info(f"Saved content blocks for {en_bio_id}")
+
+            zh_blocks = step_retrieve_zh_content_blocks(zh_bio_id)
+            logger.info(f"Successfully retrieved {len(zh_blocks)} paragraphs for {zh_bio_id}")
+            with open(f'{BIO_SAVE_DIR}/{zh_bio_id}_zh.pkl', 'wb') as f:
+                dill.dump(zh_blocks, f)
+            logger.info(f"Saved content blocks for {en_bio_id}")
+        except DisambiguationPageError: 
+            logger.error(f"Failed on {en_bio_id} as it is a disambiguation page.")
+            failed_bio_ids.append(en_bio_id)
+            # raise Exception(f"Failed on {en_bio_id}")
+        except:
+            logger.error(f"Failed on {en_bio_id}")
+            failed_bio_ids.append(en_bio_id)
+            continue
+            # raise Exception(f"Failed on {en_bio_id}")
+        progress.update(1)
+    logger.info(f"The failed bio ids are: {failed_bio_ids}")
+
+
 def step_filter_rows(bio_frame: pl.DataFrame, **kwargs) -> pl.DataFrame:
     initial_size = len(bio_frame)
     bio_frame = bio_frame.filter(pl.col('fr_bio_id') != 'unavailable through mediawiki')
@@ -247,6 +308,19 @@ def step_filter_rows(bio_frame: pl.DataFrame, **kwargs) -> pl.DataFrame:
     current_size = len(bio_frame)
     logger.info(f"Filtered out {initial_size - current_size} rows.")
     return bio_frame
+
+def step_filter_rows_zh(bio_frame: pl.DataFrame, **kwargs) -> pl.DataFrame:
+    try:
+        logger.info(f"Columns in bio_frame before filtering: {bio_frame.columns}")
+        initial_size = len(bio_frame)
+        bio_frame = bio_frame.filter(pl.col('zh_bio_id') != 'unavailable through mediawiki')
+        bio_frame = bio_frame.filter(pl.col('person_name') != 'unavailable through wikidata')
+        current_size = len(bio_frame)
+        logger.info(f"Filtered out {initial_size - current_size} rows.")
+        return bio_frame
+    except Exception as e:
+        logger.error(f"Error in step_filter_rows_zh: {e}")
+        raise
 
 def step_filter_rows_lgbtbiocorpus(bio_frame: pl.DataFrame, **kwargs) -> pl.DataFrame:
     initial_size = len(bio_frame)
@@ -286,6 +360,24 @@ def step_obtain_target_en_fr_bio_ids(bio_frame, **kwargs):
 
     
     return en_fr_bio_ids_names
+
+
+
+def step_obtain_target_en_zh_bio_ids(bio_frame, **kwargs):
+    # get the corresponding fr bio ids
+    en_bio_ids = bio_frame['en_bio_id'].to_list()
+    zh_bio_ids = bio_frame['zh_bio_id'].to_list()
+    person_names = bio_frame['person_name'].to_list()
+
+    # # zip the en and fr bio ids together
+    en_zh_bio_ids_names = list(zip(en_bio_ids, 
+                                   zh_bio_ids, 
+                                   person_names ))
+    logger.info(f"{en_zh_bio_ids_names}")
+
+    
+    return en_zh_bio_ids_names
+
 
 def step_obtain_target_en_ru_bio_ids(bio_frame, **kwargs):
     ipdb.set_trace()
@@ -712,6 +804,47 @@ def scrape_en_fr_bios():
 
     metadata = conduct(os.path.join(SCRATCH_DIR, "bio_scrape_cache"), step_dict, "scrape_en_fr_bios")
 
+
+def step_get_en_zh_bio_ids(**kwargs) -> pl.DataFrame:
+    try:
+        en_bio_ids = ['Mooncake', 'Jay_Chou', 'Nanjing']
+        frame = pl.DataFrame({'en_bio_id': en_bio_ids})
+        progress = tqdm.tqdm(total=len(frame))
+        get_zh_wikiid_progress = partial(_get_zhwiki_id, progress=progress)
+        frame = frame.with_columns([
+            pl.col('en_bio_id').map_elements(get_zh_wikiid_progress).alias('zh_bio_id'),
+        ])
+        logger.info(f"Generated frame in step_get_en_zh_bio_ids: {frame}")
+        return frame
+    except Exception as e:
+        logger.error(f"Error in step_get_en_zh_bio_ids: {e}")
+        raise
+
+@click.command()
+def scrape_en_zh_bios():
+    step_dict = OrderedDict()
+    step_dict['step_get_id_frame'] = SingletonStep(step_get_en_zh_bio_ids, {
+        'version': '001'
+    })
+    step_dict['step_add_person_name_column'] = SingletonStep(step_add_person_name_column, {
+        'bio_frame': 'step_get_id_frame',
+        'version': '001'
+    })
+    step_dict['step_filter_rows_zh'] = SingletonStep(step_filter_rows_zh, {
+        'bio_frame': 'step_add_person_name_column', 
+        'version': '001'
+    })
+    step_dict['step_obtain_target_en_zh_bio_ids'] = SingletonStep(step_obtain_target_en_zh_bio_ids, {
+        'bio_frame': 'step_filter_rows_zh',
+        'version': '007'
+    })
+    step_dict['step_load_zh_bios'] = SingletonStep(step_load_zh_bios, {
+        'en_zh_bio_ids_names': 'step_obtain_target_en_zh_bio_ids',
+        'version': '001'
+    })
+
+    metadata = conduct(os.path.join(SCRATCH_DIR, "bio_scrape_cache"), step_dict, "scrape_en_zh_bios")
+
 @click.group()
 def main():
     pass
@@ -720,7 +853,8 @@ main.add_command(scrape_french_bios_lgbtbiocorpus) # for replicating EMNLP'24
 main.add_command(scrape_russian_bios_lgbtbiocorpus) # for replicating EMNLP'24
 main.add_command(scrape_people_categories) # covariates for regression analysis in EMNLP'24
 main.add_command(scrape_ablation_bios)
-main.add_command(scrape_en_fr_bios) 
+main.add_command(scrape_en_fr_bios)
+main.add_command(scrape_en_zh_bios) 
 
 if __name__ == '__main__':
     main()
