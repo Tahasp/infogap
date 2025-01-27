@@ -153,10 +153,10 @@ def execute_complete_gpt():
     #     'en_fr_info_gaps': 'prep_for_caa',
     #     'version': '002'
     # })
-    # full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame, {
-    #     'info_gap_dfs': 'map_step_compute_info_gap', 
-    #     'version': '003'
-    # })
+    full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame, {
+        'info_gap_dfs': 'map_step_compute_info_gap', 
+        'version': '003'
+    })
     # full_map_dict['step_annotate_complete_tgt'] = SingletonStep(step_annotate_complete_tgt, {
     #     'annotation_frame': 'step_prep_annotation_frame',
     #     'version': '001'
@@ -164,6 +164,7 @@ def execute_complete_gpt():
     metadata = conduct(os.path.join(SCRATCH_DIR, "full_cache"), full_map_dict, "full_analysis_logs")
     info_gap_dfs = load_mr_artifact(metadata[0])
     connotation_dfs = load_mr_artifact(metadata[-1])
+    ipdb.set_trace()
 
 def _parse_response(response_raw):
     assert ',' in response_raw, f"Response does not contain a comma: {response_raw}"
