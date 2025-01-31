@@ -8,8 +8,9 @@ from typing import Optional, Dict, List
 from functools import partial
 from collections import OrderedDict
 
-from packages.steps.info_diff_steps import step_retrieve_en_content_blocks, step_retrieve_fr_content_blocks, step_generate_facts, step_obtain_paragraphs_associations, step_retrieve_potential_matches, step_compute_info_gap_reasoning, step_union_alignments, step_collapse_gpt_labels,\
-      step_retrieve_prescraped_en_content_blocks, step_retrieve_prescraped_fr_content_blocks, step_generate_facts_flan,\
+from packages.steps.info_diff_steps import step_retrieve_en_content_blocks, step_retrieve_fr_content_blocks, step_retrieve_prescraped_content_blocks, step_generate_facts, step_obtain_paragraphs_associations,\
+      step_obtain_en_zh_paragraphs_associations, step_retrieve_potential_matches, step_compute_info_gap_reasoning, step_union_alignments, step_collapse_gpt_labels,\
+      step_retrieve_prescraped_en_content_blocks, step_retrieve_prescraped_fr_content_blocks, step_retrieve_prescraped_zh_content_blocks, step_generate_facts_flan,\
       step_compute_info_gap_reasoning_flan,\
       step_retrieve_prescraped_ru_content_blocks, step_obtain_en_ru_paragraphs_associations,\
       step_retrieve_prescraped_ru_content_blocks,\
@@ -93,6 +94,262 @@ def get_en_fr_info_diff_map_dict(en_bio_id=None, fr_bio_id=None, person_name=Non
         'pronoun': 'step_infer_pronoun'
     })
     return map_reduce_dict
+
+
+# def get_en_zh_info_diff_map_dict(en_bio_id=None, zh_bio_id=None, person_name=None, zh_person_name=None):
+#     map_reduce_dict = OrderedDict()
+
+#     ## English
+#     en_bio_id_dict = {'en_bio_id': en_bio_id} if en_bio_id else {}
+#     zh_bio_id_dict = {'tgt_bio_id': zh_bio_id} if zh_bio_id else {}
+#     person_name_dict = {'person_name': person_name, 'tgt_person_name': zh_person_name} if person_name else {}
+#     print(zh_bio_id_dict)
+#     map_reduce_dict['step_get_en_content_blocks'] = SingletonStep(step_retrieve_prescraped_en_content_blocks, { # in info diff steps
+#         'version': '003', 
+#         **en_bio_id_dict
+#     },)
+#     map_reduce_dict['step_get_zh_content_blocks'] = SingletonStep(step_retrieve_prescraped_zh_content_blocks, { # in info diff steps
+#         'version': '003', 
+#         **zh_bio_id_dict
+#     })
+#     ## Repeat, but for chinese
+#     map_reduce_dict['step_generate_facts'] = SingletonStep(step_generate_facts, { # in info diff steps
+#         'version': '003',
+#         'lang_code': 'en',
+#         'content_blocks': 'step_get_en_content_blocks', 
+#         **person_name_dict
+#     })
+#     map_reduce_dict['step_generate_facts_zh'] = SingletonStep(step_generate_facts, { # in info diff steps
+#         'version': '002',
+#         'lang_code': 'zh', 
+#         'content_blocks': 'step_get_zh_content_blocks', 
+#         **person_name_dict
+#     })
+#     # map_reduce_dict['step_infer_pronoun'] = SingletonStep(step_infer_pronoun, {
+#     #     'version': '001',
+#     #     'en_content_blocks': 'step_get_en_content_blocks' 
+#     # })
+#     #### 
+#     map_reduce_dict['step_align_fact_paragraphs'] = SingletonStep(step_obtain_en_zh_paragraphs_associations, {
+#         'version': '003',
+#         'en_facts': 'step_generate_facts',
+#         'zh_facts': 'step_generate_facts_zh'
+#     })
+#     map_reduce_dict['step_union_fact_paragraphs'] = SingletonStep(step_union_alignments, {
+#         'version': '002',
+#         'unpruned_alignment_strns': 'step_align_fact_paragraphs',
+#         'lang_code': 'zh'
+#     })
+
+#     map_reduce_dict['step_find_retrieval_candidates'] = SingletonStep(step_retrieve_potential_matches_en_tgt, {
+#         'version': '010',
+#         'en_facts': 'step_generate_facts',
+#         'tgt_facts': 'step_generate_facts_zh',
+#         'alignment_df': 'step_union_fact_paragraphs', 
+#         'lang_code': 'zh',
+#         **en_bio_id_dict,
+#         **zh_bio_id_dict,
+#         **person_name_dict,
+#         'tgt_bio_id': zh_bio_id
+#     })
+#     ### 
+
+#     map_reduce_dict['step_reasoning_intersection_label'] = SingletonStep(step_compute_info_gap_reasoning, {
+#         'version': '006',
+#         'model_name': 'gpt-4o',
+#         'lang_code': 'zh',
+#         'info_gap_retrieval_dfs': 'step_find_retrieval_candidates',
+#         **person_name_dict
+#     })
+#     map_reduce_dict['step_collapse_gpt_labels'] = SingletonStep(step_collapse_gpt_labels, {
+#         'version': '002',
+#         'model_intersection_names': ('gpt-4o',), 
+#         'gpt_info_gap_dfs': 'step_reasoning_intersection_label'
+#     })
+#     # TODO: this has to be updated since we pass content blocks (possibly containing headers) rather than paragraphs
+#     map_reduce_dict['step_add_fact_to_sent_alignment_info'] = SingletonStep(step_forced_align_en_tgt_facts_to_paragraph, {
+#         'version': '002',
+#         'en_tgt_info_gaps': 'step_collapse_gpt_labels',
+#         'en_content_blocks': 'step_get_en_content_blocks',
+#         'tgt_content_blocks': 'step_get_zh_content_blocks',
+#         'pronoun': None
+#     })
+#     return map_reduce_dict
+
+
+def get_en_zh_info_diff_map_dict(en_bio_id=None, zh_bio_id=None, person_name=None, tgt_person_name=None):
+    map_reduce_dict = OrderedDict()
+
+    ## English
+    en_bio_id_dict = {'en_bio_id': en_bio_id} if en_bio_id else {}
+    zh_bio_id_dict = {'tgt_bio_id': zh_bio_id} if zh_bio_id else {}
+    person_name_dict = {'person_name': person_name, 'tgt_person_name': zh_person_name} if person_name else {}
+    print(zh_bio_id_dict)
+    map_reduce_dict['step_get_en_content_blocks'] = SingletonStep(step_retrieve_prescraped_en_content_blocks, { # in info diff steps
+        'version': '003', 
+        **en_bio_id_dict
+    },)
+    map_reduce_dict['step_get_zh_content_blocks'] = SingletonStep(step_retrieve_prescraped_zh_content_blocks, { # in info diff steps
+        'version': '003', 
+        **zh_bio_id_dict
+    })
+    ## Repeat, but for chinese
+    map_reduce_dict['step_generate_facts'] = SingletonStep(step_generate_facts, { # in info diff steps
+        'version': '003',
+        'lang_code': 'en',
+        'content_blocks': 'step_get_en_content_blocks', 
+        **person_name_dict
+    })
+    map_reduce_dict['step_generate_facts_zh'] = SingletonStep(step_generate_facts, { # in info diff steps
+        'version': '002',
+        'lang_code': 'zh', 
+        'content_blocks': 'step_get_zh_content_blocks', 
+        **person_name_dict
+    })
+    # map_reduce_dict['step_infer_pronoun'] = SingletonStep(step_infer_pronoun, {
+    #     'version': '001',
+    #     'en_content_blocks': 'step_get_en_content_blocks' 
+    # })
+    #### 
+    map_reduce_dict['step_align_fact_paragraphs'] = SingletonStep(step_obtain_en_zh_paragraphs_associations, {
+        'version': '003',
+        'en_facts': 'step_generate_facts',
+        'zh_facts': 'step_generate_facts_zh'
+    })
+    map_reduce_dict['step_union_fact_paragraphs'] = SingletonStep(step_union_alignments, {
+        'version': '002',
+        'unpruned_alignment_strns': 'step_align_fact_paragraphs',
+        'lang_code': 'zh'
+    })
+
+    map_reduce_dict['step_find_retrieval_candidates'] = SingletonStep(step_retrieve_potential_matches_en_tgt, {
+        'version': '010',
+        'en_facts': 'step_generate_facts',
+        'tgt_facts': 'step_generate_facts_zh',
+        'alignment_df': 'step_union_fact_paragraphs', 
+        'lang_code': 'zh',
+        **en_bio_id_dict,
+        **zh_bio_id_dict,
+        **person_name_dict,
+        'tgt_bio_id': zh_bio_id
+    })
+    ### 
+
+    map_reduce_dict['step_reasoning_intersection_label'] = SingletonStep(step_compute_info_gap_reasoning, {
+        'version': '006',
+        'model_name': 'gpt-4o',
+        'lang_code': 'zh',
+        'info_gap_retrieval_dfs': 'step_find_retrieval_candidates',
+        **person_name_dict
+    })
+    map_reduce_dict['step_collapse_gpt_labels'] = SingletonStep(step_collapse_gpt_labels, {
+        'version': '002',
+        'model_intersection_names': ('gpt-4o',), 
+        'gpt_info_gap_dfs': 'step_reasoning_intersection_label'
+    })
+    # TODO: this has to be updated since we pass content blocks (possibly containing headers) rather than paragraphs
+    map_reduce_dict['step_add_fact_to_sent_alignment_info'] = SingletonStep(step_forced_align_en_tgt_facts_to_paragraph, {
+        'version': '002',
+        'en_tgt_info_gaps': 'step_collapse_gpt_labels',
+        'en_content_blocks': 'step_get_en_content_blocks',
+        'tgt_content_blocks': 'step_get_zh_content_blocks',
+        'pronoun': None
+    })
+    return map_reduce_dict
+
+
+
+
+
+
+def get_en_tgt_info_diff_map_dict(en_bio_id=None, tgt_bio_id=None, person_name=None, tgt_person_name=None):
+    map_reduce_dict = OrderedDict()
+
+    ## English
+    en_bio_id_dict = {'en_bio_id': en_bio_id} if en_bio_id else {}
+    tgt_bio_id_dict = {'tgt_bio_id': tgt_bio_id} if tgt_bio_id else {}
+    person_name_dict = {'person_name': person_name, 'tgt_person_name': tgt_person_name} if person_name else {}
+    print(tgt_bio_id_dict)
+    map_reduce_dict['step_get_en_content_blocks'] = SingletonStep(step_retrieve_prescraped_content_blocks, { # in info diff steps
+        'version': '003', 
+        'lang': 'en',
+        **en_bio_id_dict
+    },)
+    map_reduce_dict['step_get_zh_content_blocks'] = SingletonStep(step_retrieve_prescraped_content_blocks, { # in info diff steps
+        'version': '003', 
+        'lang': 'zh',
+        **tgt_bio_id_dict
+    })
+    ## Repeat, but for chinese
+    map_reduce_dict['step_generate_facts'] = SingletonStep(step_generate_facts, { # in info diff steps
+        'version': '003',
+        'lang_code': 'en',
+        'content_blocks': 'step_get_en_content_blocks', 
+        **person_name_dict
+    })
+    map_reduce_dict['step_generate_facts_zh'] = SingletonStep(step_generate_facts, { # in info diff steps
+        'version': '002',
+        'lang_code': 'zh', 
+        'content_blocks': 'step_get_zh_content_blocks', 
+        **person_name_dict
+    })
+    # map_reduce_dict['step_infer_pronoun'] = SingletonStep(step_infer_pronoun, {
+    #     'version': '001',
+    #     'en_content_blocks': 'step_get_en_content_blocks' 
+    # })
+    #### 
+    map_reduce_dict['step_align_fact_paragraphs'] = SingletonStep(step_obtain_en_zh_paragraphs_associations, {
+        'version': '003',
+        'en_facts': 'step_generate_facts',
+        'zh_facts': 'step_generate_facts_zh'
+    })
+    map_reduce_dict['step_union_fact_paragraphs'] = SingletonStep(step_union_alignments, {
+        'version': '002',
+        'unpruned_alignment_strns': 'step_align_fact_paragraphs',
+        'lang_code': 'zh'
+    })
+
+    map_reduce_dict['step_find_retrieval_candidates'] = SingletonStep(step_retrieve_potential_matches_en_tgt, {
+        'version': '010',
+        'en_facts': 'step_generate_facts',
+        'tgt_facts': 'step_generate_facts_zh',
+        'alignment_df': 'step_union_fact_paragraphs', 
+        'lang_code': 'zh',
+        **en_bio_id_dict,
+        **tgt_bio_id_dict,
+        **person_name_dict,
+        'tgt_bio_id': tgt_bio_id
+    })
+    ### 
+
+    map_reduce_dict['step_reasoning_intersection_label'] = SingletonStep(step_compute_info_gap_reasoning, {
+        'version': '006',
+        'model_name': 'gpt-4o',
+        'lang_code': 'zh',
+        'info_gap_retrieval_dfs': 'step_find_retrieval_candidates',
+        **person_name_dict
+    })
+    map_reduce_dict['step_collapse_gpt_labels'] = SingletonStep(step_collapse_gpt_labels, {
+        'version': '002',
+        'model_intersection_names': ('gpt-4o',), 
+        'gpt_info_gap_dfs': 'step_reasoning_intersection_label'
+    })
+    # TODO: this has to be updated since we pass content blocks (possibly containing headers) rather than paragraphs
+    map_reduce_dict['step_add_fact_to_sent_alignment_info'] = SingletonStep(step_forced_align_en_tgt_facts_to_paragraph, {
+        'version': '002',
+        'en_tgt_info_gaps': 'step_collapse_gpt_labels',
+        'en_content_blocks': 'step_get_en_content_blocks',
+        'tgt_content_blocks': 'step_get_zh_content_blocks',
+        'pronoun': None
+    })
+    return map_reduce_dict
+
+
+
+
+
+
+
 
 def get_en_fr_ablation_dict() -> Dict:
     map_reduce_dict = OrderedDict()

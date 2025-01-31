@@ -1,5 +1,6 @@
 import click
 import os
+import re
 import requests
 import tqdm
 import dill
@@ -163,6 +164,7 @@ def step_add_person_name_column(bio_frame: pl.DataFrame, **kwargs) -> pl.DataFra
     bio_frame = bio_frame.with_columns([
         pl.col('en_bio_id').map_elements(lambda element: get_name(en_bio_id=element)).alias('person_name'),
     ])
+    ipdb.set_trace()
     # log the number of rows that are null 
     logger.info(f"Number of rows with null target_person_name: {len(bio_frame.filter(pl.col('person_name').is_null()))}")
     return bio_frame
@@ -232,12 +234,14 @@ def step_load_bios(en_fr_bio_ids_names: List[Tuple[str,str]], **kwargs):
             logger.info(f"Retrieving content blocks for {en_bio_id} and {fr_bio_id}")
             en_blocks = step_retrieve_en_content_blocks(en_bio_id)
             logger.info(f"Successfully retrieved {len(en_blocks)} paragraphs for {en_bio_id}")
+            ipdb.set_trace()
             with open(f'{BIO_SAVE_DIR}/{en_bio_id}_en.pkl', 'wb') as f:
                 dill.dump(en_blocks, f)
             logger.info(f"Saved content blocks for {en_bio_id}")
 
             fr_blocks = step_retrieve_fr_content_blocks(fr_bio_id)
             logger.info(f"Successfully retrieved {len(fr_blocks)} paragraphs for {fr_bio_id}")
+            ipdb.set_trace()
             with open(f'{BIO_SAVE_DIR}/{fr_bio_id}_fr.pkl', 'wb') as f:
                 dill.dump(fr_blocks, f)
             logger.info(f"Saved content blocks for {en_bio_id}")
@@ -301,12 +305,14 @@ def step_load_zh_bios(en_zh_bio_ids_names: List[Tuple[str,str]], **kwargs):
     logger.info(f"The failed bio ids are: {failed_bio_ids}")
 
 
+
 def step_filter_rows(bio_frame: pl.DataFrame, **kwargs) -> pl.DataFrame:
     initial_size = len(bio_frame)
     bio_frame = bio_frame.filter(pl.col('fr_bio_id') != 'unavailable through mediawiki')
     bio_frame = bio_frame.filter(pl.col('person_name') != 'unavailable through wikidata')
     current_size = len(bio_frame)
     logger.info(f"Filtered out {initial_size - current_size} rows.")
+    ipdb.set_trace()
     return bio_frame
 
 def step_filter_rows_zh(bio_frame: pl.DataFrame, **kwargs) -> pl.DataFrame:
@@ -357,7 +363,7 @@ def step_obtain_target_en_fr_bio_ids(bio_frame, **kwargs):
                                    fr_bio_ids, 
                                    person_names ))
     logger.info(f"{en_fr_bio_ids_names}")
-
+    ipdb.set_trace()
     
     return en_fr_bio_ids_names
 
@@ -777,6 +783,7 @@ def step_get_en_fr_bio_ids(**kwargs) -> pl.DataFrame:
     frame = frame.with_columns([
         pl.col('en_bio_id').map_elements(get_fr_wikiid_progress).alias('fr_bio_id'),
     ])
+    ipdb.set_trace()
     return frame
 
 @click.command()
@@ -845,6 +852,150 @@ def scrape_en_zh_bios():
 
     metadata = conduct(os.path.join(SCRATCH_DIR, "bio_scrape_cache"), step_dict, "scrape_en_zh_bios")
 
+
+def get_wikidata_id(topic, lang, **kwargs):
+    """Fetches the Wikidata Item ID for a given Wikipedia article title."""
+    url = f"https://www.wikidata.org/w/api.php?action=wbgetentities&sites={lang}wiki&titles={topic}&props=info&format=json"
+    response = requests.get(url)
+    data = response.json()
+    entities = data.get("entities", {})
+    if entities:
+        return list(entities.keys())[0]  # Return the first Wikidata ID found
+    else: 
+        logger.error(f"Could not find Wikidata ID for the given topic {topic}")
+        return None
+
+def get_interlanguage_links(wikidata_id, **kwargs):
+    """Fetches interlanguage Wikipedia links for a given Wikidata Item ID."""
+    url = f"https://www.wikidata.org/w/api.php?action=wbgetentities&ids={wikidata_id}&props=sitelinks/urls&format=json"
+    response = requests.get(url)
+    data = response.json()
+    
+    sitelinks = data.get("entities", {}).get(wikidata_id, {}).get("sitelinks", {})
+    
+    language_links = {site: details['url'] for site, details in sitelinks.items()}
+    return language_links
+
+def extract_article_title_from_urls(urls, lang, **kwargs):
+    lang_wiki = f"{lang}wiki"
+    url = urls[lang_wiki]
+    """Extracts the article title from a Wikipedia URL."""
+    match = re.search(r"wiki/([^#?]*)", url)
+    if match:
+        return match.group(1).replace("_", " ")
+    else: 
+        logger.error(f"Can't extract title for url: {url}")
+    return None
+
+def get_wikipedia_text(article_title, lang, **kwargs):
+    """Fetches all text content from a Wikipedia article."""
+    url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext&format=json&titles={article_title}"
+    response = requests.get(url)
+    data = response.json()
+    
+    pages = data.get("query", {}).get("pages", {})
+    for page_id, page_data in pages.items():
+        if "extract" in page_data:
+            return page_data["extract"]
+        else:
+            logger.error(f"Could not find extract for title: {article_title}")
+            return None
+
+def make_lang_article_dict(en_article_title, en_lang, tgt_article_title, tgt_lang, **kwargs):
+    # ipdb.set_trace()
+    return {en_lang: en_article_title, tgt_lang: tgt_article_title}
+
+def process_wikipedia_text(text, lang, **kwargs):
+    ignore_headers = {"en": "See also", "zh": "参见", "fr": "Voir aussi"}
+    lines = text.split('\n')  # Split by new line
+    processed_paragraphs = []
+    
+    for line in lines:
+        line = line.strip()
+        
+        # Detect headers using regex
+        header_match = re.match(r'^(=+)(.*?)=+$', line)
+        if header_match:
+            header_text = header_match.group(2).strip().lower()
+            if header_text == ignore_headers[lang]:
+                break  # Stop processing if 'reference' header is encountered
+            processed_paragraphs.append({"header": header_text})
+            continue
+        
+        # Store paragraph if it meets length requirement
+        elif len(line) >= 6:
+            processed_paragraphs.append({"paragraph": line})
+    
+    return processed_paragraphs
+
+def step_load_both_bios(lang_article_dict, **kwargs):
+    # create BIO_SAVE_DIR if it doesn't exist
+    try:
+        os.makedirs(BIO_SAVE_DIR)
+    except FileExistsError:
+        pass
+    progress = tqdm.tqdm(total=len(lang_article_dict))
+
+    failed_bio_ids = []
+    
+    for lang, article_title in lang_article_dict.items():
+
+        logger.info(f"Retrieving content blocks for {lang} {article_title}")
+        text = get_wikipedia_text(article_title, lang)
+        logger.info(f"Successfully retrieved {len(text)} paragraphs for {lang} {article_title}")
+        # Perform text processing on the retrieved blocks
+        blocks = process_wikipedia_text(text, lang)
+        with open(f'{BIO_SAVE_DIR}/{article_title}_{lang}.pkl', 'wb') as f:
+            dill.dump(blocks, f)
+        logger.info(f"Saved content blocks for {lang} {article_title}")
+    progress.update(1)
+    logger.info(f"The failed bio ids are: {failed_bio_ids}")
+
+
+
+@click.command()
+def scrape_bios():
+    topic = input("Enter Wikipedia article title (e.g., Albert Einstein): ")
+    lang = input("Enter Wikipedia language code (default: en): ") or "en"
+    tgt_lang = input("Enter the targeted language you would like to scrape for this topic")
+    step_dict = OrderedDict()
+    step_dict['get_wikidata_id'] = SingletonStep(get_wikidata_id, {
+        'topic': topic,
+        'lang': lang, 
+        'version': '001'
+    })
+    step_dict['get_interlanguage_links'] = SingletonStep(get_interlanguage_links, {
+        'wikidata_id': 'get_wikidata_id',
+        'version': '001'
+    })
+    step_dict['extract_en_article_title_from_url'] = SingletonStep(extract_article_title_from_urls, {
+        'urls': 'get_interlanguage_links',
+        'lang': 'en',
+        'version': '001'
+    })
+    step_dict['extract_tgt_article_title_from_url'] = SingletonStep(extract_article_title_from_urls, {
+        'urls': 'get_interlanguage_links',
+        'lang': tgt_lang,
+        'version': '001'
+    })
+    step_dict['lang_article_dict'] = SingletonStep(make_lang_article_dict, {
+        'en_article_title': 'extract_en_article_title_from_url',
+        'en_lang': 'en',
+        'tgt_article_title': 'extract_tgt_article_title_from_url',
+        'tgt_lang': tgt_lang,
+        'version': '001'
+
+    })
+    step_dict['step_load_both_bios'] = SingletonStep(step_load_both_bios, {
+        'lang_article_dict': 'lang_article_dict',
+        'version': '001'
+    })
+    metadata = conduct(os.path.join(SCRATCH_DIR, "bio_scrape_cache"), step_dict, f"new_scrape_en_{tgt_lang}_bios")
+
+
+
+
+
 @click.group()
 def main():
     pass
@@ -855,6 +1006,7 @@ main.add_command(scrape_people_categories) # covariates for regression analysis 
 main.add_command(scrape_ablation_bios)
 main.add_command(scrape_en_fr_bios)
 main.add_command(scrape_en_zh_bios) 
+main.add_command(scrape_bios)
 
 if __name__ == '__main__':
     main()

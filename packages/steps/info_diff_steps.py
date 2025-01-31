@@ -70,6 +70,17 @@ def step_retrieve_en_content_blocks(en_bio_id: str,
 class BioFilenotFoundError(Exception):
     pass
 
+def step_retrieve_prescraped_content_blocks(en_bio_id, 
+                                            lang: str,
+                                              save_dir = BIO_SAVE_DIR,
+                                               **kwargs):
+    try:
+        with open(f"{save_dir}/{en_bio_id}_{lang}.pkl", 'rb') as f:
+            return dill.load(f)
+    except FileNotFoundError:
+        raise BioFilenotFoundError(f"Could not find the prescraped bio file for {en_bio_id}")
+
+
 def step_retrieve_prescraped_en_content_blocks(en_bio_id, 
                                               save_dir = BIO_SAVE_DIR,
                                                **kwargs):
@@ -95,6 +106,21 @@ def step_retrieve_prescraped_fr_content_blocks(fr_bio_id,
             return dill.load(f)
     except FileNotFoundError:
         raise BioFilenotFoundError(f"Could not find the prescraped bio file for {fr_bio_id}")
+
+
+    
+def step_retrieve_prescraped_zh_content_blocks(zh_bio_id, 
+                                               save_dir = BIO_SAVE_DIR,
+                                               **kwargs):
+    try:
+        with open(f"{save_dir}/{zh_bio_id}_zh.pkl", 'rb') as f:
+            return dill.load(f)
+    except FileNotFoundError:
+        raise BioFilenotFoundError(f"Could not find the prescraped bio file for {fr_bio_id}")
+
+
+
+
 
 def remove_person_specific_blocks_fr(fr_bio_id, content_blocks):
     if fr_bio_id == 'Abdellah_Taïa':
@@ -317,14 +343,69 @@ def extract_fact_decomp_list(response: str) -> List[str]:
     else:
         return response
 
-def step_generate_facts(content_blocks: List[Union[Paragraph,Header]], 
+# def step_generate_facts(content_blocks: List[Union[Paragraph,Header]], 
+#                         lang_code: str,
+#                         person_name: str,
+#                         model_name: str = 'gpt-4o',
+#                         **kwargs) -> List[List[str]]:
+#     # TODO: need to update this to filter out headers.
+#     all_facts = []
+#     paragraphs = [block for block in content_blocks if isinstance(block, Paragraph)]
+#     # client = load_tsvetshop_client() 
+#     client = load_other_client()
+#     ask_for_facts = partial(ask_gpt_for_facts, client, model_name)
+#     fact_cache = check_gpt_fact_cache(person_name, lang_code)
+#     total_num_tokens = 0
+#     for paragraph in tqdm(paragraphs):
+#         if paragraph.clean_text in fact_cache :
+#             all_facts.append(FactParagraph(fact_cache[paragraph.clean_text]))
+#             continue
+#         elif paragraph.clean_text + "    *: premier" in fact_cache:
+#             all_facts.append(FactParagraph(fact_cache[paragraph.clean_text + "    *: premier"]))
+#         else:
+#             try:
+#                 response, num_tokens = ask_for_facts(paragraph.clean_text, lang_code)
+#             except BadRequestError as e:
+#                 sentences = sent_tokenize(paragraph.clean_text)
+#                 # get the error message from the exception
+#                 error_message = e.args[0]
+#                 logger.error(f"Content warning from openai for paragraph: {paragraph.clean_text}. The error message is: {error_message}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
+#                 all_facts.append(FactParagraph(sentences))
+#                 continue
+#             try:
+#                 fact_str = extract_fact_decomp_list(response) 
+#                 fact_list = list(eval(fact_str))
+#                 # NOTE: this if the prompt is changed, the cache will *not* be updated. something to keep in mind.
+#                 fact_cache[paragraph.clean_text] = fact_list
+#                 all_facts.append(FactParagraph(fact_list))
+#             except:
+#                 ipdb.set_trace()
+#                 sentences = sent_tokenize(paragraph.clean_text)
+#                 logger.warning(f"Could not parse facts from paragraph: {paragraph.clean_text}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
+#                 all_facts.append(FactParagraph(sentences))
+#             # except:
+#             #     logger.error(f"Could not parse facts from paragraph: {paragraph.clean_text}")
+#             #     raise ValueError(f"Could not parse facts from paragraph: {paragraph.clean_text}")
+
+#             total_num_tokens += num_tokens
+#     assert len(all_facts) == len(paragraphs)
+#     # log the number of tokens required to generate the facts for the person
+#     write_gpt_fact_cache(person_name, lang_code, fact_cache)
+#     logger.info(f"Total number of tokens required to generate the facts for {person_name} in {lang_code}: {total_num_tokens}")
+#     # write the fact cache to a file
+#     return all_facts
+
+
+
+def step_generate_facts(content_blocks: List[str], 
                         lang_code: str,
                         person_name: str,
                         model_name: str = 'gpt-4o',
                         **kwargs) -> List[List[str]]:
     # TODO: need to update this to filter out headers.
+    ipdb.set_trace()
     all_facts = []
-    paragraphs = [block for block in content_blocks if isinstance(block, Paragraph)]
+    paragraphs = [block for block in content_blocks]
     # client = load_tsvetshop_client() 
     client = load_other_client()
     ask_for_facts = partial(ask_gpt_for_facts, client, model_name)
@@ -332,18 +413,16 @@ def step_generate_facts(content_blocks: List[Union[Paragraph,Header]],
     total_num_tokens = 0
     for paragraph in tqdm(paragraphs):
         if paragraph.clean_text in fact_cache :
-            all_facts.append(FactParagraph(fact_cache[paragraph.clean_text]))
+            all_facts.append(FactParagraph(fact_cache[paragraph]))
             continue
-        elif paragraph.clean_text + "    *: premier" in fact_cache:
-            all_facts.append(FactParagraph(fact_cache[paragraph.clean_text + "    *: premier"]))
         else:
             try:
-                response, num_tokens = ask_for_facts(paragraph.clean_text, lang_code)
+                response, num_tokens = ask_for_facts(paragraph, lang_code)
             except BadRequestError as e:
                 sentences = sent_tokenize(paragraph.clean_text)
                 # get the error message from the exception
                 error_message = e.args[0]
-                logger.error(f"Content warning from openai for paragraph: {paragraph.clean_text}. The error message is: {error_message}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
+                logger.error(f"Content warning from openai for paragraph: {paragraph}. The error message is: {error_message}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
                 all_facts.append(FactParagraph(sentences))
                 continue
             try:
@@ -355,11 +434,12 @@ def step_generate_facts(content_blocks: List[Union[Paragraph,Header]],
             except:
                 ipdb.set_trace()
                 sentences = sent_tokenize(paragraph.clean_text)
-                logger.warning(f"Could not parse facts from paragraph: {paragraph.clean_text}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
+                logger.warning(f"Could not parse facts from paragraph: {paragraph}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
                 all_facts.append(FactParagraph(sentences))
             # except:
             #     logger.error(f"Could not parse facts from paragraph: {paragraph.clean_text}")
             #     raise ValueError(f"Could not parse facts from paragraph: {paragraph.clean_text}")
+
             total_num_tokens += num_tokens
     assert len(all_facts) == len(paragraphs)
     # log the number of tokens required to generate the facts for the person
@@ -537,6 +617,32 @@ def step_obtain_paragraphs_associations(step_name: str, version: str,
     assert fr_en_algn_strn.shape[0] == len(fr_fact_df['paragraph_index'].unique())
     return en_fr_algn_strn, fr_en_algn_strn
 
+
+
+
+def step_obtain_en_zh_paragraphs_associations(step_name: str, version: str, 
+                               en_facts: List[List[str]], zh_facts: List[List[str]], 
+                               **kwargs) -> Tuple[np.array, np.array]:
+    # create two polars dataframes, one for the english facts and one for the chinese facts
+    # the columns should be 'fact' and 'paragraph_index'
+    model = SentenceTransformer('sentence-transformers/LaBSE', cache_folder=HF_CACHE_DIR)
+    en_fact_df = _create_fact_df(en_facts)
+    zh_fact_df = _create_fact_df(zh_facts)
+    # add the sentence embedding column, called 'fact_embed'
+    def add_embed_column(fact_df):
+        fact_df = fact_df.with_columns([
+            pl.col('fact').map_elements(lambda fact: model.encode(fact)).alias('fact_embed')
+        ])
+        return fact_df
+    en_fact_df = add_embed_column(en_fact_df)
+    zh_fact_df = add_embed_column(zh_fact_df)
+    en_zh_algn_strn, zh_en_algn_strn = compute_algn_strngths(en_fact_df, zh_fact_df, 'hubness_margin')
+    assert en_zh_algn_strn.shape[0] == len(en_fact_df['paragraph_index'].unique())
+    assert zh_en_algn_strn.shape[0] == len(zh_fact_df['paragraph_index'].unique())
+    return en_zh_algn_strn, zh_en_algn_strn
+
+
+
 def step_obtain_en_ru_paragraphs_associations(step_name: str, version: str, 
                                en_facts: List[List[str]], ru_facts: List[List[str]], 
                                **kwargs) -> Tuple[np.array, np.array]:
@@ -682,43 +788,115 @@ def step_retrieve_potential_matches( en_bio_id: str, fr_bio_id: str,
     return en_info_gap_df.drop("fact_embed").to_pandas(), fr_info_gap_df.drop("fact_embed").to_pandas(), alignment_df.to_pandas()
 
 # TODO: change this to call _compute_info_gap properly.
-def step_retrieve_potential_matches_en_tgt( en_bio_id: str, tgt_bio_id: str,
-                     en_facts: List[List[str]], tgt_facts: List[List[str]], 
-                     alignment_df: pl.DataFrame, 
-                     lang_code: str,
-                     person_name: str,
-                     tgt_person_name: str,
-                     **kwargs) -> Tuple[pl.DataFrame, pl.DataFrame]:
-    """Compute the information gap between the English and French paragraphs.
-    Every row in {en_fact_df} and {fr_fact_df} will be annotated with whether it is in the:
+# def step_retrieve_potential_matches_en_tgt( en_bio_id: str, tgt_bio_id: str,
+#                      en_facts: List[List[str]], tgt_facts: List[List[str]], 
+#                      alignment_df: pl.DataFrame, 
+#                      lang_code: str,
+#                      person_name: str,
+#                      tgt_person_name: str,
+#                      **kwargs) -> Tuple[pl.DataFrame, pl.DataFrame]:
+#     """Compute the information gap between the English and French paragraphs.
+#     Every row in {en_fact_df} and {fr_fact_df} will be annotated with whether it is in the:
+#     - strong information diff (whether it is part of a paragraph that was not aligned to any other paragraph)
+#     - weak information diff (whether it is part of a paragraph that was aligned to another paragraph, but wasn't aligned to a 
+#         fact in the aligned paragraph)
+#     - info intersection: whether it is part of a paragraph that was aligned to another paragraph and was also aligned to a fact
+#         in the aligned paragraph
+#     """
+#     # we can use the same decision rule as the one used in the alignment pruning step for paragraphs.
+#     model = SentenceTransformer('sentence-transformers/LaBSE', cache_folder=HF_CACHE_DIR)
+#     en_fact_df = _create_fact_df(en_facts)
+#     tgt_fact_df = _create_fact_df(tgt_facts)
+#     # add an index column to the fact dataframes
+#     en_fact_df = en_fact_df.with_columns([
+#         pl.lit(pl.Series(range(len(en_fact_df)))).alias('fact_index')
+#     ])
+#     tgt_fact_df = tgt_fact_df.with_columns([
+#         pl.lit(pl.Series(range(len(tgt_fact_df)))).alias('fact_index')
+#     ])
+#     # add the fact embeddings to the fact dataframes
+#     en_fact_df = en_fact_df.with_columns([
+#         pl.col('fact').map_elements(lambda fact: model.encode(fact)).alias('fact_embed')
+#     ])
+#     tgt_fact_df = tgt_fact_df.with_columns([
+#         pl.col('fact').map_elements(lambda fact: model.encode(fact)).alias('fact_embed')
+#     ])
+
+#     en_info_gap_df = _compute_info_gap(en_fact_df, tgt_fact_df, alignment_df, 'en', lang_code, person_name, tgt_person_name)
+#     tgt_info_gap_df = _compute_info_gap(tgt_fact_df, en_fact_df, alignment_df, lang_code, 'en', person_name, tgt_person_name)
+#     # add a literal column to the info gap dataframes, with the en_bio_id
+#     en_info_gap_df = en_info_gap_df.with_columns([
+#         pl.lit(en_bio_id).alias('en_bio_id'),
+#         pl.lit(person_name).alias('person_name'),
+#         pl.lit(tgt_person_name).alias(f'{lang_code}_person_name')
+#     ])
+#     tgt_info_gap_df = tgt_info_gap_df.with_columns([
+#         pl.lit(tgt_bio_id).alias(f'{lang_code}_bio_id'),
+#         pl.lit(person_name).alias('person_name'),
+#         pl.lit(tgt_person_name).alias(f'{lang_code}_person_name')
+#     ])
+#     alignment_df = alignment_df.with_columns([
+#         pl.lit(en_bio_id).alias('en_bio_id'),
+#         pl.lit(tgt_bio_id).alias(f'{lang_code}_bio_id'),
+#         pl.lit(person_name).alias('person_name'),
+#         pl.lit(tgt_person_name).alias(f'{lang_code}_person_name')
+#     ])
+#     return en_info_gap_df.drop("fact_embed").to_pandas(), tgt_info_gap_df.drop("fact_embed").to_pandas(), alignment_df.to_pandas()
+
+
+def step_retrieve_potential_matches_en_tgt(en_bio_id: str, tgt_bio_id: str,
+                                           en_facts: List[List[str]], tgt_facts: List[List[str]], 
+                                           alignment_df: pl.DataFrame, 
+                                           lang_code: str,
+                                           person_name: str,
+                                           tgt_person_name: str,
+                                           **kwargs) -> Tuple[pl.DataFrame, pl.DataFrame]:
+    """Compute the information gap between the English and target language paragraphs.
+    Every row in {en_fact_df} and {tgt_fact_df} will be annotated with whether it is in the:
     - strong information diff (whether it is part of a paragraph that was not aligned to any other paragraph)
     - weak information diff (whether it is part of a paragraph that was aligned to another paragraph, but wasn't aligned to a 
         fact in the aligned paragraph)
     - info intersection: whether it is part of a paragraph that was aligned to another paragraph and was also aligned to a fact
         in the aligned paragraph
     """
-    # we can use the same decision rule as the one used in the alignment pruning step for paragraphs.
+    # Use the same decision rule as the one used in the alignment pruning step for paragraphs.
     model = SentenceTransformer('sentence-transformers/LaBSE', cache_folder=HF_CACHE_DIR)
     en_fact_df = _create_fact_df(en_facts)
     tgt_fact_df = _create_fact_df(tgt_facts)
-    # add an index column to the fact dataframes
+
+    # Add an index column to the fact dataframes
     en_fact_df = en_fact_df.with_columns([
         pl.lit(pl.Series(range(len(en_fact_df)))).alias('fact_index')
     ])
     tgt_fact_df = tgt_fact_df.with_columns([
         pl.lit(pl.Series(range(len(tgt_fact_df)))).alias('fact_index')
     ])
-    # add the fact embeddings to the fact dataframes
+
+    def encode_fact(progress, atomic_fact):
+        progress.update(1)
+        return model.encode(atomic_fact)
+
+    # Add the fact embeddings to the fact dataframes with progress bars
+    logger.info(f"Encoding English facts")
+    progress = tqdm(total=len(en_fact_df))
+    encode_fn = partial(encode_fact, progress)
     en_fact_df = en_fact_df.with_columns([
-        pl.col('fact').map_elements(lambda fact: model.encode(fact)).alias('fact_embed')
+        pl.col('fact').map_elements(encode_fn).alias('fact_embed')
     ])
+    progress.close()
+
+    logger.info(f"Encoding {lang_code} facts")
+    progress = tqdm(total=len(tgt_fact_df))
+    encode_fn = partial(encode_fact, progress)
     tgt_fact_df = tgt_fact_df.with_columns([
-        pl.col('fact').map_elements(lambda fact: model.encode(fact)).alias('fact_embed')
+        pl.col('fact').map_elements(encode_fn).alias('fact_embed')
     ])
+    progress.close()
 
     en_info_gap_df = _compute_info_gap(en_fact_df, tgt_fact_df, alignment_df, 'en', lang_code, person_name, tgt_person_name)
     tgt_info_gap_df = _compute_info_gap(tgt_fact_df, en_fact_df, alignment_df, lang_code, 'en', person_name, tgt_person_name)
-    # add a literal column to the info gap dataframes, with the en_bio_id
+
+    # Add literal columns to the info gap dataframes with the bio_id and person_name
     en_info_gap_df = en_info_gap_df.with_columns([
         pl.lit(en_bio_id).alias('en_bio_id'),
         pl.lit(person_name).alias('person_name'),
@@ -729,16 +907,20 @@ def step_retrieve_potential_matches_en_tgt( en_bio_id: str, tgt_bio_id: str,
         pl.lit(person_name).alias('person_name'),
         pl.lit(tgt_person_name).alias(f'{lang_code}_person_name')
     ])
+
     alignment_df = alignment_df.with_columns([
         pl.lit(en_bio_id).alias('en_bio_id'),
         pl.lit(tgt_bio_id).alias(f'{lang_code}_bio_id'),
         pl.lit(person_name).alias('person_name'),
         pl.lit(tgt_person_name).alias(f'{lang_code}_person_name')
     ])
+
     return en_info_gap_df.drop("fact_embed").to_pandas(), tgt_info_gap_df.drop("fact_embed").to_pandas(), alignment_df.to_pandas()
 
 def step_extract_person_abln(annotated_frame: pl.DataFrame, person_name: str, **kwargs):
     return annotated_frame.filter(pl.col('person_name')==person_name)
+
+
 
 def step_compute_info_gap_reasoning(info_gap_retrieval_dfs: Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame], 
                                     person_name: str, 
@@ -783,6 +965,7 @@ def step_compute_info_gap_reasoning(info_gap_retrieval_dfs: Tuple[pd.DataFrame, 
                     if input_prompt in cache:
                         logger.info(f"Cache hit with input prompt: {input_prompt}")
                 gpt_intersection_labels = response
+                logger.info(f"Intersection labels: {gpt_intersection_labels}")
                 # log the number of tokens required to validate intersection labels for the person
                 logger.info(f"{total_num_tokens}")
                 progress.update(1)
@@ -792,6 +975,7 @@ def step_compute_info_gap_reasoning(info_gap_retrieval_dfs: Tuple[pd.DataFrame, 
                 logger.warning(f"Content warning for src_fact_context: {src_fact_context} and tgt_contexts: {tgt_contexts}.")
                 return 'failed due to content policy'
     annotation_fn = partial(annotate_llm, tgt_fact_intersection_cache, lang_code, 'en', tgt_info_gap_df['person_name'][0], tgt_info_gap_df, en_info_gap_df)
+    
     tgt_info_gap_df = tgt_info_gap_df.with_columns([
         pl.struct(['paragraph_index', 'fact_index', 'info_retrieval_mapping']).\
             map_elements(lambda row: annotation_fn(row['paragraph_index'], row['info_retrieval_mapping'], row['fact_index'])).\
@@ -801,6 +985,10 @@ def step_compute_info_gap_reasoning(info_gap_retrieval_dfs: Tuple[pd.DataFrame, 
     ])
     logger.info(f"Total number of tokens required to validate intersection labels for {person_name} in {lang_code}: {full_info_gap_num_tokens[lang_code]}")
     annotation_fn = partial(annotate_llm, en_fact_intersection_cache, 'en', lang_code, en_info_gap_df['person_name'][0], en_info_gap_df, tgt_info_gap_df)
+    
+    
+    logger.debug(f"en_info_gap_df Schema: {en_info_gap_df.schema}")
+    logger.debug(f"en_info_gap_df Head:\n{en_info_gap_df.head(5)}")
     en_info_gap_df = en_info_gap_df.with_columns([
         pl.struct(['paragraph_index', 'fact_index',  'info_retrieval_mapping']).\
             map_elements(lambda row: annotation_fn(row['paragraph_index'], row['info_retrieval_mapping'], row['fact_index'])).\

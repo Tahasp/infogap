@@ -12,6 +12,7 @@ from sentence_transformers import SentenceTransformer
 from nltk import sent_tokenize
 import numpy as np
 
+
 def forced_align_fact_to_paragraph(fact_df: pl.DataFrame, paragraph: Paragraph, 
                                    hubness_measure: np.array,
                                    model: SentenceTransformer):
@@ -128,7 +129,7 @@ def step_forced_align_facts_to_paragraph(en_fr_info_gaps, en_content_blocks: Lis
     # add the pronoun to the info_gap_df
     en_info_gaps = en_info_gaps.with_columns(pl.lit(pronoun).alias('pronoun'))
     fr_info_gaps = fr_info_gaps.with_columns(pl.lit(pronoun).alias('pronoun'))
-    return en_info_gaps, fr_info_gaps, alignment_dfs    
+    return en_info_gaps.to_pandas(), fr_info_gaps.to_pandas(), alignment_dfs       
     # eventually, we will want to return the alignment information into the information gap dataframe.
 
 def step_forced_align_en_tgt_facts_to_paragraph(en_tgt_info_gaps, en_content_blocks: List[Union[Paragraph, Header]], 
@@ -165,7 +166,7 @@ def step_forced_align_en_tgt_facts_to_paragraph(en_tgt_info_gaps, en_content_blo
     # add the pronoun to the info_gap_df
     en_info_gaps = en_info_gaps.with_columns(pl.lit(pronoun).alias('pronoun'))
     tgt_info_gaps = tgt_info_gaps.with_columns(pl.lit(pronoun).alias('pronoun'))
-    return en_info_gaps, tgt_info_gaps, alignment_dfs    
+    return en_info_gaps.to_pandas(), tgt_info_gaps.to_pandas(), alignment_dfs    
 
 def construct_info_diff_caa_step_dict():
     info_diff_caa_dict = OrderedDict()
