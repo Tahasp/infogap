@@ -234,14 +234,12 @@ def step_load_bios(en_fr_bio_ids_names: List[Tuple[str,str]], **kwargs):
             logger.info(f"Retrieving content blocks for {en_bio_id} and {fr_bio_id}")
             en_blocks = step_retrieve_en_content_blocks(en_bio_id)
             logger.info(f"Successfully retrieved {len(en_blocks)} paragraphs for {en_bio_id}")
-            ipdb.set_trace()
             with open(f'{BIO_SAVE_DIR}/{en_bio_id}_en.pkl', 'wb') as f:
                 dill.dump(en_blocks, f)
             logger.info(f"Saved content blocks for {en_bio_id}")
 
             fr_blocks = step_retrieve_fr_content_blocks(fr_bio_id)
             logger.info(f"Successfully retrieved {len(fr_blocks)} paragraphs for {fr_bio_id}")
-            ipdb.set_trace()
             with open(f'{BIO_SAVE_DIR}/{fr_bio_id}_fr.pkl', 'wb') as f:
                 dill.dump(fr_blocks, f)
             logger.info(f"Saved content blocks for {en_bio_id}")
@@ -256,6 +254,54 @@ def step_load_bios(en_fr_bio_ids_names: List[Tuple[str,str]], **kwargs):
             # raise Exception(f"Failed on {en_bio_id}")
         progress.update(1)
     logger.info(f"The failed bio ids are: {failed_bio_ids}")
+
+
+
+def step_load_zh_bios(en_zh_bio_ids_names: List[Tuple[str,str]], **kwargs):
+    logger.info(f"Processing bio IDs: {en_zh_bio_ids_names}")
+    en_bio_ids = [en_bio_id for en_bio_id, _, _ in en_zh_bio_ids_names]
+    zh_bio_ids = [zh_bio_id for _, zh_bio_id, _ in en_zh_bio_ids_names]
+    # create BIO_SAVE_DIR if it doesn't exist
+    try:
+        os.makedirs(BIO_SAVE_DIR)
+    except FileExistsError:
+        pass
+    progress = tqdm.tqdm(total=len(en_bio_ids))
+
+    failed_bio_ids = []
+    for i in range(len(en_bio_ids)):
+        en_bio_id = en_bio_ids[i]
+        zh_bio_id = zh_bio_ids[i]
+
+        # check if the bio_id has already been processed. TODO: UNCOMMENT LATER
+        if os.path.exists(f'{BIO_SAVE_DIR}/{en_bio_id}_en.pkl') and os.path.exists(f'{BIO_SAVE_DIR}/{zh_bio_id}_zh.pkl'):
+            progress.update(1)
+            continue
+        try:
+            logger.info(f"Retrieving content blocks for {en_bio_id} and {zh_bio_id}")
+            en_blocks = step_retrieve_en_content_blocks(en_bio_id)
+            logger.info(f"Successfully retrieved {len(en_blocks)} paragraphs for {en_bio_id}")
+            with open(f'{BIO_SAVE_DIR}/{en_bio_id}_en.pkl', 'wb') as f:
+                dill.dump(en_blocks, f)
+            logger.info(f"Saved content blocks for {en_bio_id}")
+
+            zh_blocks = step_retrieve_zh_content_blocks(zh_bio_id)
+            logger.info(f"Successfully retrieved {len(zh_blocks)} paragraphs for {zh_bio_id}")
+            with open(f'{BIO_SAVE_DIR}/{zh_bio_id}_zh.pkl', 'wb') as f:
+                dill.dump(zh_blocks, f)
+            logger.info(f"Saved content blocks for {en_bio_id}")
+        except DisambiguationPageError: 
+            logger.error(f"Failed on {en_bio_id} as it is a disambiguation page.")
+            failed_bio_ids.append(en_bio_id)
+            # raise Exception(f"Failed on {en_bio_id}")
+        except:
+            logger.error(f"Failed on {en_bio_id}")
+            failed_bio_ids.append(en_bio_id)
+            continue
+            # raise Exception(f"Failed on {en_bio_id}")
+        progress.update(1)
+    logger.info(f"The failed bio ids are: {failed_bio_ids}")
+
 
 
 
@@ -363,7 +409,7 @@ def step_obtain_target_en_fr_bio_ids(bio_frame, **kwargs):
                                    fr_bio_ids, 
                                    person_names ))
     logger.info(f"{en_fr_bio_ids_names}")
-    ipdb.set_trace()
+
     
     return en_fr_bio_ids_names
 
@@ -1006,7 +1052,9 @@ main.add_command(scrape_people_categories) # covariates for regression analysis 
 main.add_command(scrape_ablation_bios)
 main.add_command(scrape_en_fr_bios)
 main.add_command(scrape_en_zh_bios) 
+
 main.add_command(scrape_bios)
+
 
 if __name__ == '__main__':
     main()
