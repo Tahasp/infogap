@@ -1,21 +1,34 @@
 from typing import List, Tuple
 import polars as pl
+import ipdb
+import pandas as pd
 
 # TODO: have to change this
-def reduce_info_gaps(en_fr_info_gaps: List[Tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]]) -> Tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
-    # concatenate the en dataframes and the fr dataframes
+def reduce_info_gaps(en_fr_info_gaps: List[Tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]]) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
-    en_info_gaps = pl.concat([(info_gap[0].drop('flan-large_prompt') if 'flan-large_prompt' in info_gap[0].columns else info_gap[0]) for info_gap in en_fr_info_gaps])
-    fr_info_gaps = pl.concat([(info_gap[1].drop('flan-large_prompt') if 'flan-large_prompt' in info_gap[1].columns else info_gap[1]) for info_gap in en_fr_info_gaps])
-    alignment_dfs = pl.concat([pl.from_pandas(info_gap[2]) for info_gap in en_fr_info_gaps])
-    # en_info_gaps = pl.concat(en_info_gaps)
-    # fr_info_gaps = pl.concat(fr_info_gaps)
-    # alignment_dfs = pl.concat(alignment_dfs)
-    # en_info_gaps = assign_gpt_label(en_info_gaps)
-    # fr_info_gaps = assign_gpt_label(fr_info_gaps)
+    en_fr_info_gaps = [(pl.from_pandas(info_gap[0]), pl.from_pandas(info_gap[1]), pl.from_pandas(info_gap[2])) for info_gap in en_fr_info_gaps]
+        # Concatenate the English info gaps
+    en_info_gaps = pl.concat(
+        [(info_gap[0].drop('flan-large_prompt') if 'flan-large_prompt' in info_gap[0].columns else info_gap[0]) 
+         for info_gap in en_fr_info_gaps]
+    )
+
+    # Concatenate the French info gaps
+    fr_info_gaps = pl.concat(
+        [(info_gap[1].drop('flan-large_prompt') if 'flan-large_prompt' in info_gap[1].columns else info_gap[1]) 
+         for info_gap in en_fr_info_gaps]
+    )
+
+    # Concatenate the alignment data (converting from pandas if necessary)
+    alignment_dfs = pl.concat(
+        [info_gap[2] if isinstance(info_gap[2], pd.DataFrame) else info_gap[2] 
+         for info_gap in en_fr_info_gaps]
+    )
+
+    # Convert Polars DataFrames to Pandas DataFrames
+    return en_info_gaps.to_pandas(), fr_info_gaps.to_pandas(), alignment_dfs.to_pandas()
+
     
-    return en_info_gaps, fr_info_gaps, alignment_dfs
-
 def reduce_paragraph_ablation(abln_info_gap_dfs: List[pl.DataFrame]):
     """
     Columns: 

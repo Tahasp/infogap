@@ -172,4 +172,5 @@ cython_debug/
 
 .env
 
-scratch/
+
+connotation_df_en_fr_flan.json

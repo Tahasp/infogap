@@ -56,11 +56,13 @@ def ask_gpt_for_facts(client,
         message = [{"role": "user", "content": f"Veuillez décomposer le paragraphe suivant en une liste de faits indépendants. Tous les faits doivent être placés dans une liste python sous forme de chaîne de caractères.\n {paragraph}"}]
     elif lang_code == 'ru':
         message = [{"role": "user", "content": f"Пожалуйста, разбейте следующий абзац на список независимых фактов. Все факты должны быть помещены в строковый список Python (e.g., ['Тим вырос в городе Мальорке, штат Алабама.','Его отец был работником верфи.', 'Мать Тима была домохозяйкой.','Кук получил степень бакалавра в области промышленного производства в университете Обёрна в 1982 году.','Кук получил диплом МВА в школе Фукуа университета Дьюка в 1988 году.']).\n {paragraph}"}]
+    elif lang_code == 'zh':
+        message = [{"role": "user", "content": f" 请将以下段落分解为一系列独立事实。所有事实都应放在字符串化的 Python 列表中。\n {paragraph}"}]
 
     response = client.chat.completions.create(
         model=model_name,
         temperature=0,
-        max_tokens = len(paragraph) + 100,
+        max_tokens = len(paragraph) + 1000,
         messages = message)
     # response = client.chat.completions.create(
     #     model="gpt-4",
@@ -68,6 +70,7 @@ def ask_gpt_for_facts(client,
     #     temperature=0,
     # messages = message)
     response_content = response.choices[0].message.content
+    logger.info(f"RRRResponse_content: {response_content}")
     response_total_tokens = response.usage.total_tokens
     return response_content, response_total_tokens
 
@@ -90,9 +93,10 @@ def ask_gpt_about_fact_intersection(client, model_name, cache,
                                     src_fact_context: List[str], tgt_fact_context: List[List[str]], 
                                     person_name: str, 
                                     tgt_person_name: str):
-    en_lang_code_to_lang = {'en': 'English', 'fr': 'French', 'ru': 'Russian'}
-    fr_lang_code_to_lang = {'en': 'anglais', 'fr': 'français', 'ru': 'russe'}
-    ru_lang_code_to_lang = {'en': 'английский', 'fr': 'французский', 'ru': 'русский'}
+    en_lang_code_to_lang = {'en': 'English', 'fr': 'French', 'ru': 'Russian', 'zh': 'Chinese'}
+    fr_lang_code_to_lang = {'en': 'anglais', 'fr': 'français', 'ru': 'russe', 'zh': 'chinois'}
+    ru_lang_code_to_lang = {'en': 'английский', 'fr': 'французский', 'ru': 'русский', 'zh': 'русский'}
+    zh_lang_code_to_lang = {'en': '英语', 'fr': '法语', 'ru': '俄语', 'zh': '中文'}
     if src_lang_code == 'en':
         # input_prompt = f"Consider these English facts about {person_name}:\n {src_fact_context}. Is the last fact in the list inferrerable from the following French facts?\n {tgt_fact_context}. Return either 'yes' or 'no'."
         input_prompt = f"Consider these English facts about {person_name}:\n {src_fact_context}. Is the last fact in the former list inferrable from any of these lists of facts?\n {tgt_fact_context} Return a list containing ['yes' or 'no'] -- one response for each list of {en_lang_code_to_lang[tgt_lang_code]} facts. All of the yes/no responses should be placed in a stringified python list. (e.g., ['yes', 'no', 'yes'])"
@@ -100,6 +104,8 @@ def ask_gpt_about_fact_intersection(client, model_name, cache,
         input_prompt = f"Considérez ces faits français sur {person_name}:\n {src_fact_context}. Est le dernier fait de la liste inférable de l'une des listes de faits suivantes?\n {tgt_fact_context} Retournez une liste contenant ['yes' ou 'no'] -- une réponse pour chaque liste de faits {fr_lang_code_to_lang[tgt_lang_code]}. Toutes les réponses yes/no doivent être placées dans une liste python. (e.g., ['yes', 'no', 'yes'])"
     elif src_lang_code == 'ru':
         input_prompt = f"Рассмотрим эти факты на русском языке о {tgt_person_name}:\n {src_fact_context}. Можно ли вывести последний факт из одного из следующих списков фактов?\n {tgt_fact_context} Возвращает список, содержащий ['да' или 'нет'] — один ответ для каждого списка фактов {ru_lang_code_to_lang[tgt_lang_code]}. Все ответы «да/нет» должны быть помещены в список строк Python. (например, ['да', 'нет', 'да'])"
+    elif src_lang_code == 'zh':
+        input_prompt = f"考虑以下关于 {tgt_person_name} 的中文事实：\n {src_fact_context}。前一个列表中的最后一个事实是否可以从以下这些事实列表中推断出来？\n {tgt_fact_context} 返回一个包含 ['yes' 或 'no'] 的列表 -- 每个 {zh_lang_code_to_lang[tgt_lang_code]} 事实列表都有一个 'yes' 或 'no' 响应。所有 'yes' 或 'no' 响应都应该放置在一个字符串化的 Python 列表中 (比如, ['yes', 'no', 'yes'])"
     else:
         raise ValueError(f"Invalid language code: {src_lang_code}")
     if input_prompt not in cache:
@@ -111,7 +117,7 @@ def ask_gpt_about_fact_intersection(client, model_name, cache,
         assert model_name in ['gpt4v', 'gpt-4', 'gpt-4o', 'gpt-3.5-turbo-0125'], start_debug()
         response = client.chat.completions.create(
             model=model_name,
-            max_tokens=len(src_fact_context) + len(tgt_fact_context) + 100,
+            max_tokens=len(src_fact_context) + len(tgt_fact_context) + 1000,
             temperature=0,
         messages = message)
         # .choices[0].message.content
@@ -128,7 +134,7 @@ def ask_gpt_if_premise_entails_hypothesis(premise: str, hypothesis: str):
     message=[{"role": "user", "content": f"Please determine if the following premise entails the following hypothesis. Return either 'entails', 'contradicts', or 'neither'.\n Premise: {premise}\n Hypothesis: {hypothesis}"}]
     response = openai.ChatCompletion.create(
         model="gpt-4",
-        max_tokens=len(premise) + len(hypothesis) + 100,
+        max_tokens=len(premise) + len(hypothesis) + 1000,
         temperature=0.8,
     messages = message)
     return response
@@ -177,7 +183,7 @@ def prompt_gpt_4(client, valid_labels: List[str], prompt) -> Tuple[str, int]:
     response = client.chat.completions.create(
         model="gpt-4",
         temperature=0,
-        max_tokens = len(prompt) + 100,
+        max_tokens = len(prompt) + 1000,
         messages = message)
     response_content = response.choices[0].message.content
     if response_content not in valid_labels:

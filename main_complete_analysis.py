@@ -12,11 +12,12 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from sklearn.dummy import DummyClassifier
 from tqdm import tqdm
 import torch
+from datetime import datetime
 
 from packages.steps.info_diff_steps import BioFilenotFoundError, ExceptionOOMSingleDataPoint
 from packages.steps.map_dicts import get_en_fr_info_diff_map_dict, get_en_fr_info_diff_map_dict_flan , get_caa_map_dict_fr, get_en_ru_gpt_info_diff_map_dict, get_caa_map_dict_gpt,\
     get_en_ru_info_diff_map_dict_flan, get_caa_map_dict_flan_ru, get_en_fr_ablation_dict,\
-    get_caa_map_dict_fr_gpt
+    get_caa_map_dict_fr_gpt, get_en_zh_info_diff_map_dict, get_en_tgt_info_diff_map_dict
 from packages.steps.reductions import reduce_info_gaps, reduce_caa_classifications, reduce_paragraph_ablation
 from packages.steps.caa_steps import step_prep_for_caa, step_caa_multi_sentence, step_caa_multi_sentence_flan, InfoGapEmptyError, NoPronounError
 from packages.annotate import annotate_frame, load_save_if_nexists
@@ -32,8 +33,8 @@ except ImportError:
 
 logger = loguru.logger
 def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, **kwargs) -> pl.DataFrame:
-    en_info_gap_df = info_gap_dfs[0]
-    tgt_info_gap_df = info_gap_dfs[1]
+    en_info_gap_df = pl.from_pandas(info_gap_dfs[0])
+    tgt_info_gap_df = pl.from_pandas(info_gap_dfs[1])
     
     def get_annotation_frame(src_info_gap_df, tgt_info_gap_df):
         src_info_annotation_rows = []
@@ -86,8 +87,8 @@ def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, 
 def step_annotate_complete_tgt(annotation_frame: pl.DataFrame, 
                                **kwargs):
     # get today's date in form MM-DD
-    today_str= "03-06"
-    # today = datetime.today()
+    # today_str= "03-06"
+    today = datetime.today()
 
     annotation_frame = load_save_if_nexists(annotation_frame, f"{ANNOTATION_SAVE_PATH}/annotation_{today_str}.json")
     def ask_question(fact_row):
@@ -136,19 +137,19 @@ def execute_complete_gpt():
         'fr_bio_id',
         [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, AxisError]
     )
-    full_map_dict['map_step_compute_connotations'] = MapReduceStep(caa_map_dict,
-        {
-            'en_bio_id': ["Gabriel_Attal"],
-            'fr_bio_id': ["Gabriel_Attal"],
-            'person_name': ["Gabriel_Attal"]
-        },{
-            'version': '001', 
-            'map_en_fr_info_gaps': 'map_step_compute_info_gap'
-        },
-        reduce_caa_classifications,
-        'fr_bio_id', 
-        [InfoGapEmptyError]
-    )
+    # full_map_dict['map_step_compute_connotations'] = MapReduceStep(caa_map_dict,
+    #     {
+    #         'en_bio_id': ["Gabriel_Attal"],
+    #         'fr_bio_id': ["Gabriel_Attal"],
+    #         'person_name': ["Gabriel_Attal"]
+    #     },{
+    #         'version': '001', 
+    #         'map_en_fr_info_gaps': 'map_step_compute_info_gap'
+    #     },
+    #     reduce_caa_classifications,
+    #     'fr_bio_id', 
+    #     [InfoGapEmptyError]
+    # )
     # full_map_dict['prep_for_caa'] = SingletonStep(step_prep_for_caa, {
     #     'en_fr_info_gaps': 'map_step_compute_info_gap',
     #     'version': '004'
@@ -157,17 +158,158 @@ def execute_complete_gpt():
     #     'en_fr_info_gaps': 'prep_for_caa',
     #     'version': '002'
     # })
-    # full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame, {
-    #     'info_gap_dfs': 'map_step_compute_info_gap', 
-    #     'version': '003'
+    full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame, {
+        'info_gap_dfs': 'map_step_compute_info_gap', 
+        'version': '003',
+        'tgt_lang_code': 'fr',
+        'intersection_label': 'gpt-4_intersection_label'
+    })
+    # full_map_dict['step_add_annotation_translations'] = SingletonStep(step_add_translations_to_annotation_frame, { # adds translations for {tgt_lang_code} using NLLB-200, in case you don't read {tgt_lang_code}
+    # 'annotation_frame': 'step_prep_annotation_frame', 
+    # 'target_fname': 'attal_annotation_frame.json',
+    # 'version': '001'
     # })
-    # full_map_dict['step_annotate_complete_tgt'] = SingletonStep(step_annotate_complete_tgt, {
-    #     'annotation_frame': 'step_prep_annotation_frame',
-    #     'version': '001'
-    # })
+    full_map_dict['step_annotate_complete_tgt'] = SingletonStep(step_annotate_complete_tgt, {
+        'annotation_frame': 'step_prep_annotation_frame',
+        'version': '001'
+    })
     metadata = conduct(os.path.join(SCRATCH_DIR, "full_cache"), full_map_dict, "full_analysis_logs")
     info_gap_dfs = load_mr_artifact(metadata[0])
     connotation_dfs = load_mr_artifact(metadata[-1])
+
+
+@click.command()
+def execute_complete_gpt_en_zh():
+    full_map_dict = OrderedDict()
+    info_gap_map_dict = get_en_zh_info_diff_map_dict()
+    # caa_map_dict = get_caa_map_dict_zh_gpt()
+
+    # reduce_info_gaps,
+    # 'zh_bio_id',
+    # [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint]
+
+    # TODO: need to watch out for the Abdellah bio since its french wikipedia page is a little weird 
+    # TODO: need to log the total number of tokens for the queries somewhere/somehow
+        # reduce_info_gaps,
+        # 'zh_bio_id',
+        #[BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, np.AxisError]
+    full_map_dict['map_step_compute_info_gap'] = MapReduceStep(info_gap_map_dict, 
+        {
+            'en_bio_id': ["Jay_Chou"],
+            'zh_bio_id': ["周杰倫"], 
+            'person_name': ["Jay_Chou"],
+            'tgt_person_name': ["周杰倫"]
+        },{
+        'version': '002'
+        }, 
+        reduce_info_gaps, 
+        'zh_bio_id',
+        [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, AxisError]
+    )
+    # full_map_dict['map_step_compute_connotations'] = MapReduceStep(caa_map_dict,
+    #     {
+    #         'en_bio_id': ["Jay_Chou"],
+    #         'zh_bio_id': ["周杰倫"],
+    #         'person_name': ["Jay_Chou"]
+    #     },{
+    #         'version': '001', 
+    #         'map_en_zh_info_gaps': 'map_step_compute_info_gap'
+    #     },
+    #     reduce_caa_classifications,
+    #     'zh_bio_id', 
+    #     [InfoGapEmptyError]
+    # )
+    # full_map_dict['prep_for_caa'] = SingletonStep(step_prep_for_caa, {
+    #     'en_zh_info_gaps': 'map_step_compute_info_gap',
+    #     'version': '004'
+    # })
+    # full_map_dict['step_compute_caa_multi_sentence'] = SingletonStep(step_caa_multi_sentence, {
+    #     'en_zh_info_gaps': 'prep_for_caa',
+    #     'version': '002'
+    # })
+    full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame, {
+        'info_gap_dfs': 'map_step_compute_info_gap', 
+        'version': '003',
+        'tgt_lang_code': 'zh',
+        'intersection_label': 'gpt-4o_intersection_label',
+    })
+    full_map_dict['step_annotate_complete_tgt'] = SingletonStep(step_annotate_complete_tgt, {
+        'annotation_frame': 'step_prep_annotation_frame',
+        'version': '001'
+    })
+    metadata = conduct(os.path.join(SCRATCH_DIR, "full_cache_gpt_en_zh"), full_map_dict, "en_zh_gpt_logs")
+    info_gap_dfs = load_mr_artifact(metadata[0])
+    # connotation_dfs = load_mr_artifact(metadata[-1])
+    ipdb.set_trace()
+
+
+
+@click.command()
+def execute_complete_gpt_general():
+    full_map_dict = OrderedDict()
+    info_gap_map_dict = get_en_tgt_info_diff_map_dict()
+    # caa_map_dict = get_caa_map_dict_zh_gpt()
+
+    # reduce_info_gaps,
+    # 'zh_bio_id',
+    # [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint]
+
+    # TODO: need to watch out for the Abdellah bio since its french wikipedia page is a little weird 
+    # TODO: need to log the total number of tokens for the queries somewhere/somehow
+        # reduce_info_gaps,
+        # 'zh_bio_id',
+        #[BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, np.AxisError]
+    full_map_dict['map_step_compute_info_gap'] = MapReduceStep(info_gap_map_dict, 
+        {
+            'en_bio_id': ["Barack Obama"],
+            'zh_bio_id': ["%E8%B4%9D%E6%8B%89%E5%85%8B%C2%B7%E5%A5%A5%E5%B7%B4%E9%A9%AC"], 
+            'person_name': ["Barack Obama_fr"],
+            'tgt_person_name': ["%E8%B4%9D%E6%8B%89%E5%85%8B%C2%B7%E5%A5%A5%E5%B7%B4%E9%A9%AC"]
+        },{
+        'version': '002'
+        }, 
+        reduce_info_gaps, 
+        'zh_bio_id',
+        [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, AxisError]
+    )
+    # full_map_dict['map_step_compute_connotations'] = MapReduceStep(caa_map_dict,
+    #     {
+    #         'en_bio_id': ["Jay_Chou"],
+    #         'zh_bio_id': ["周杰倫"],
+    #         'person_name': ["Jay_Chou"]
+    #     },{
+    #         'version': '001', 
+    #         'map_en_zh_info_gaps': 'map_step_compute_info_gap'
+    #     },
+    #     reduce_caa_classifications,
+    #     'zh_bio_id', 
+    #     [InfoGapEmptyError]
+    # )
+    # full_map_dict['prep_for_caa'] = SingletonStep(step_prep_for_caa, {
+    #     'en_zh_info_gaps': 'map_step_compute_info_gap',
+    #     'version': '004'
+    # })
+    # full_map_dict['step_compute_caa_multi_sentence'] = SingletonStep(step_caa_multi_sentence, {
+    #     'en_zh_info_gaps': 'prep_for_caa',
+    #     'version': '002'
+    # })
+    full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame, {
+        'info_gap_dfs': 'map_step_compute_info_gap', 
+        'version': '003',
+        'tgt_lang_code': 'zh',
+        'intersection_label': 'gpt-4o_intersection_label',
+    })
+    full_map_dict['step_annotate_complete_tgt'] = SingletonStep(step_annotate_complete_tgt, {
+        'annotation_frame': 'step_prep_annotation_frame',
+        'version': '001'
+    })
+    metadata = conduct(os.path.join(SCRATCH_DIR, "full_cache_gpt_en_zh"), full_map_dict, "en_zh_gpt_logs")
+    info_gap_dfs = load_mr_artifact(metadata[0])
+    # connotation_dfs = load_mr_artifact(metadata[-1])
+    ipdb.set_trace()
+
+
+
 
 def _parse_response(response_raw):
     assert ',' in response_raw, f"Response does not contain a comma: {response_raw}"
@@ -632,6 +774,8 @@ def main():
 
 # connotation_df_en_ru_gpt_2024_05_30.json
 main.add_command(execute_complete_gpt)
+main.add_command(execute_complete_gpt_en_zh)
+main.add_command(execute_complete_gpt_general)
 main.add_command(execute_complete_flan)
 main.add_command(execute_complete_gpt_en_ru)
 main.add_command(execute_complete_mt5_en_ru)
