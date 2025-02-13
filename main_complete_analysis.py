@@ -1,6 +1,7 @@
 import loguru
 import numpy as np
 import ipdb
+import datetime
 import polars as pl
 from collections import OrderedDict
 from flowmason.flowmason import conduct, SingletonStep, load_artifact_with_step_name, MapReduceStep, load_mr_artifact
@@ -39,7 +40,7 @@ def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, 
     def get_annotation_frame(src_info_gap_df, tgt_info_gap_df):
         src_info_annotation_rows = []
         people_names = en_info_gap_df['person_name'].unique()
-        num_facts_to_sample = 10
+        num_facts_to_sample = 20
         for person_name in people_names:
             paragraph_indices = src_info_gap_df.filter(pl.col('person_name') == person_name)['paragraph_index'].unique().to_list()
             # sample a paragraph and then sample a fact from that paragraph until we hit num_facts_to_sample.
@@ -84,13 +85,13 @@ def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, 
     tgt_annotation_frame = get_annotation_frame(tgt_info_gap_df, en_info_gap_df).with_columns([pl.lit(tgt_lang_code).alias('language')])
     return pl.concat([en_annotation_frame, tgt_annotation_frame]).sample(fraction=1.0, with_replacement=False, shuffle=True)
 
-def step_annotate_complete_tgt(annotation_frame: pl.DataFrame, 
+def  step_annotate_complete_tgt(annotation_frame: pl.DataFrame, 
                                **kwargs):
     # get today's date in form MM-DD
     # today_str= "03-06"
-    today = datetime.today()
+    today = datetime.today().date()
 
-    annotation_frame = load_save_if_nexists(annotation_frame, f"{ANNOTATION_SAVE_PATH}/annotation_{today_str}.json")
+    annotation_frame = load_save_if_nexists(annotation_frame, f"{ANNOTATION_SAVE_PATH}/annotation_{today}_{kwargs['topic']}.json")
     def ask_question(fact_row):
         context_str = fact_row['src_context']
         candidate_tgt_contexts = fact_row['tgt_contexts']
@@ -106,7 +107,7 @@ def step_annotate_complete_tgt(annotation_frame: pl.DataFrame,
         question_fns=[ask_question],
         answer_validate_fn=[lambda answer: answer.lower() in ['yesa', 'yesr', 'no']],
     )
-    annotated_frame.write_json(f"{ANNOTATION_SAVE_PATH}/annotation_{today_str}.json")
+    annotated_frame.write_json(f"{ANNOTATION_SAVE_PATH}/annotation_20f_{today}_{kwargs['topic']}.json")
     return
 
 @click.command()
@@ -126,10 +127,10 @@ def execute_complete_gpt():
         #[BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, np.AxisError]
     full_map_dict['map_step_compute_info_gap'] = MapReduceStep(info_gap_map_dict, 
         {
-            'en_bio_id': ["Gabriel_Attal"],
-            'fr_bio_id': ["Gabriel_Attal"], 
-            'person_name': ["Gabriel Attal"],
-            'tgt_person_name': ["Gabriel Attal"]
+            'en_bio_id': ["Oolong"],
+            'fr_bio_id': ["Thé_Oolong"], 
+            'person_name': ["Oolong"],
+            'tgt_person_name': ["Thé_Oolong"]
         },{
         'version': '001'
         }, 
@@ -195,10 +196,10 @@ def execute_complete_gpt_en_zh():
         #[BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, np.AxisError]
     full_map_dict['map_step_compute_info_gap'] = MapReduceStep(info_gap_map_dict, 
         {
-            'en_bio_id': ["Jay_Chou"],
-            'zh_bio_id': ["周杰倫"], 
-            'person_name': ["Jay_Chou"],
-            'tgt_person_name': ["周杰倫"]
+            'en_bio_id': ["Jiang_Zemin"],
+            'zh_bio_id': ["江泽民"], 
+            'person_name': ["Jiang_Zemin"],
+            'tgt_person_name': ["江泽民"]
         },{
         'version': '002'
         }, 
@@ -235,6 +236,7 @@ def execute_complete_gpt_en_zh():
     })
     full_map_dict['step_annotate_complete_tgt'] = SingletonStep(step_annotate_complete_tgt, {
         'annotation_frame': 'step_prep_annotation_frame',
+        'topic': '江泽民',
         'version': '001'
     })
     metadata = conduct(os.path.join(SCRATCH_DIR, "full_cache_gpt_en_zh"), full_map_dict, "en_zh_gpt_logs")

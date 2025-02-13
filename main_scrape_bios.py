@@ -164,7 +164,6 @@ def step_add_person_name_column(bio_frame: pl.DataFrame, **kwargs) -> pl.DataFra
     bio_frame = bio_frame.with_columns([
         pl.col('en_bio_id').map_elements(lambda element: get_name(en_bio_id=element)).alias('person_name'),
     ])
-    ipdb.set_trace()
     # log the number of rows that are null 
     logger.info(f"Number of rows with null target_person_name: {len(bio_frame.filter(pl.col('person_name').is_null()))}")
     return bio_frame
@@ -820,16 +819,19 @@ def scrape_ablation_bios():
     metadata = conduct(os.path.join(SCRATCH_DIR, "bio_scrape_cache"), step_dict, "scrape_ablation_bios")
 
 def step_get_en_fr_bio_ids(**kwargs) -> pl.DataFrame:
-    en_bio_ids = ['Tim_Cook', 'Chelsea_Manning']
-    frame = pl.DataFrame({
-        'en_bio_id': en_bio_ids
-    })
-    progress = tqdm.tqdm(total=len(frame))
-    get_fr_wikiid_progress = partial(_get_frwiki_id, progress=progress)
-    frame = frame.with_columns([
-        pl.col('en_bio_id').map_elements(get_fr_wikiid_progress).alias('fr_bio_id'),
-    ])
-    ipdb.set_trace()
+    try:
+        en_bio_ids = ['Oolong','Mandarin_orange']
+        frame = pl.DataFrame({
+            'en_bio_id': en_bio_ids
+        })
+        progress = tqdm.tqdm(total=len(frame))
+        get_fr_wikiid_progress = partial(_get_frwiki_id, progress=progress)
+        frame = frame.with_columns([
+            pl.col('en_bio_id').map_elements(get_fr_wikiid_progress).alias('fr_bio_id'),
+        ])
+        ipdb.set_trace()
+    except Exception as e:
+        print(e)
     return frame
 
 @click.command()
@@ -860,7 +862,7 @@ def scrape_en_fr_bios():
 
 def step_get_en_zh_bio_ids(**kwargs) -> pl.DataFrame:
     try:
-        en_bio_ids = ['Mooncake', 'Jay_Chou', 'Nanjing']
+        en_bio_ids = ['Donald_Trump','Jiang_Zemin', 'Zhajiangmian', 'Tibet', 'Big_Ben']
         frame = pl.DataFrame({'en_bio_id': en_bio_ids})
         progress = tqdm.tqdm(total=len(frame))
         get_zh_wikiid_progress = partial(_get_zhwiki_id, progress=progress)
