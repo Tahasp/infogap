@@ -25,7 +25,7 @@ from packages.annotate import annotate_frame, load_save_if_nexists
 from packages.flan_query import ask_flan_about_fact_intersection, ask_mt5_about_fact_intersection
 # from packages.constants import ANNOTATION_SAVE_PATH, NUM_CONTEXT_SRC, NUM_CONTEXT_TGT, NUM_RETRIEVALS
 from packages.constants import NUM_CONTEXT_SRC, NUM_CONTEXT_TGT, NUM_RETRIEVALS, SCRATCH_DIR, CURRENT_EN_BIO_IDS, CURRENT_FR_BIO_IDS, CURRENT_PERSON_NAMES, ANNOTATION_SAVE_PATH, EN_FR_BIO_NAME_CSVS,\
-    EN_RU_BIO_NAME_CSV
+    EN_RU_BIO_NAME_CSV, TGT_LANG
 try:
     from numpy import AxisError
 except ImportError:
@@ -40,12 +40,12 @@ def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, 
     def get_annotation_frame(src_info_gap_df, tgt_info_gap_df):
         src_info_annotation_rows = []
         people_names = en_info_gap_df['person_name'].unique()
-        num_facts_to_sample = 20
+        num_facts_to_sample = 15
         for person_name in people_names:
             paragraph_indices = src_info_gap_df.filter(pl.col('person_name') == person_name)['paragraph_index'].unique().to_list()
             # sample a paragraph and then sample a fact from that paragraph until we hit num_facts_to_sample.
             num_sampled = 0
-            while num_sampled < num_facts_to_sample:
+            while num_sampled < min(num_facts_to_sample, len(paragraph_indices)):
                 paragraph_index = np.random.choice(paragraph_indices)
                 # sample a fact from the paragraph
                 fact_df = src_info_gap_df.filter(pl.col('person_name') == person_name).filter(pl.col('paragraph_index') == paragraph_index)\
@@ -250,6 +250,9 @@ def execute_complete_gpt_en_zh():
 def execute_complete_gpt_general():
     full_map_dict = OrderedDict()
     info_gap_map_dict = get_en_tgt_info_diff_map_dict()
+    tgt_lang = TGT_LANG
+    en_bio_id = "Dosa (food)"
+    tgt_bio_id = "%E0%A6%A7%E0%A7%8B%E0%A6%B8%E0%A6%BE"
     # caa_map_dict = get_caa_map_dict_zh_gpt()
 
     # reduce_info_gaps,
@@ -263,49 +266,30 @@ def execute_complete_gpt_general():
         #[BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, np.AxisError]
     full_map_dict['map_step_compute_info_gap'] = MapReduceStep(info_gap_map_dict, 
         {
-            'en_bio_id': ["Barack Obama"],
-            'zh_bio_id': ["%E8%B4%9D%E6%8B%89%E5%85%8B%C2%B7%E5%A5%A5%E5%B7%B4%E9%A9%AC"], 
-            'person_name': ["Barack Obama_fr"],
-            'tgt_person_name': ["%E8%B4%9D%E6%8B%89%E5%85%8B%C2%B7%E5%A5%A5%E5%B7%B4%E9%A9%AC"]
+            'en_bio_id': [en_bio_id],
+            'tgt_bio_id': [tgt_bio_id], 
+            'person_name': [en_bio_id],
+            'tgt_person_name': [tgt_bio_id],
+            'tgt_lang': [tgt_lang]
         },{
         'version': '002'
         }, 
         reduce_info_gaps, 
-        'zh_bio_id',
+        'tgt_bio_id',
         [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, AxisError]
     )
-    # full_map_dict['map_step_compute_connotations'] = MapReduceStep(caa_map_dict,
-    #     {
-    #         'en_bio_id': ["Jay_Chou"],
-    #         'zh_bio_id': ["周杰倫"],
-    #         'person_name': ["Jay_Chou"]
-    #     },{
-    #         'version': '001', 
-    #         'map_en_zh_info_gaps': 'map_step_compute_info_gap'
-    #     },
-    #     reduce_caa_classifications,
-    #     'zh_bio_id', 
-    #     [InfoGapEmptyError]
-    # )
-    # full_map_dict['prep_for_caa'] = SingletonStep(step_prep_for_caa, {
-    #     'en_zh_info_gaps': 'map_step_compute_info_gap',
-    #     'version': '004'
-    # })
-    # full_map_dict['step_compute_caa_multi_sentence'] = SingletonStep(step_caa_multi_sentence, {
-    #     'en_zh_info_gaps': 'prep_for_caa',
-    #     'version': '002'
-    # })
     full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame, {
         'info_gap_dfs': 'map_step_compute_info_gap', 
         'version': '003',
-        'tgt_lang_code': 'zh',
+        'tgt_lang_code': tgt_lang,
         'intersection_label': 'gpt-4o_intersection_label',
     })
     full_map_dict['step_annotate_complete_tgt'] = SingletonStep(step_annotate_complete_tgt, {
         'annotation_frame': 'step_prep_annotation_frame',
+        'topic': en_bio_id,
         'version': '001'
     })
-    metadata = conduct(os.path.join(SCRATCH_DIR, "full_cache_gpt_en_zh"), full_map_dict, "en_zh_gpt_logs")
+    metadata = conduct(os.path.join(SCRATCH_DIR, f"full_cache_gpt_en_{tgt_lang}"), full_map_dict, f"en_{tgt_lang}_gpt_logs")
     info_gap_dfs = load_mr_artifact(metadata[0])
     # connotation_dfs = load_mr_artifact(metadata[-1])
     ipdb.set_trace()

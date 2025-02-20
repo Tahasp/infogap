@@ -1,9 +1,10 @@
 import pandas as pd
 import polars as pl
+import ipdb
 from flowmason.flowmason import SingletonStep
 from packages.info_diff_caa import step_forced_align_facts_to_paragraph, step_forced_align_en_tgt_facts_to_paragraph 
 from packages.steps.caa_steps import step_prep_for_caa, step_caa_multi_sentence, step_infer_pronoun, step_prep_for_caa_en_tgt, step_caa_multi_sentence_en_tgt, step_caa_multi_sentence_flan
-from packages.constants import EVENT_SAVE_DIR
+from packages.constants import EVENT_SAVE_DIR, TGT_LANG
 from typing import Optional, Dict, List
 from functools import partial
 from collections import OrderedDict
@@ -11,10 +12,9 @@ from collections import OrderedDict
 from packages.steps.info_diff_steps import step_retrieve_en_content_blocks, step_retrieve_fr_content_blocks, step_generate_facts, step_obtain_paragraphs_associations,\
       step_obtain_en_zh_paragraphs_associations, step_retrieve_potential_matches, step_compute_info_gap_reasoning, step_union_alignments, step_collapse_gpt_labels,\
       step_retrieve_prescraped_en_content_blocks, step_retrieve_prescraped_fr_content_blocks, step_retrieve_prescraped_zh_content_blocks, step_generate_facts_flan,\
-      step_compute_info_gap_reasoning_flan,\
-      step_retrieve_prescraped_ru_content_blocks, step_obtain_en_ru_paragraphs_associations,\
-      step_retrieve_prescraped_ru_content_blocks,\
-      step_retrieve_potential_matches_en_tgt,\
+      step_retrieve_prescraped_tgt_content_blocks, step_compute_info_gap_reasoning_flan,\
+      step_retrieve_prescraped_ru_content_blocks, step_obtain_en_ru_paragraphs_associations, step_obtain_en_tgt_paragraphs_associations, \
+      step_retrieve_prescraped_ru_content_blocks, step_retrieve_potential_matches_en_tgt,\
       step_extract_person_abln, step_get_tgt_retrieval_candidates,\
       step_compute_info_gap_reasoning_simple
 
@@ -260,25 +260,24 @@ def get_en_zh_info_diff_map_dict(en_bio_id=None, zh_bio_id=None, person_name=Non
 
 
 
-
-
-def get_en_tgt_info_diff_map_dict(en_bio_id=None, tgt_bio_id=None, person_name=None, tgt_person_name=None):
+def get_en_tgt_info_diff_map_dict(en_bio_id=None, tgt_bio_id=None, person_name=None, tgt_person_name=None, tgt_lang=None):
     map_reduce_dict = OrderedDict()
-
+    print("targeted language: ", tgt_lang)
     ## English
     en_bio_id_dict = {'en_bio_id': en_bio_id} if en_bio_id else {}
     tgt_bio_id_dict = {'tgt_bio_id': tgt_bio_id} if tgt_bio_id else {}
     person_name_dict = {'person_name': person_name, 'tgt_person_name': tgt_person_name} if person_name else {}
-    print(tgt_bio_id_dict)
-    map_reduce_dict['step_get_en_content_blocks'] = SingletonStep(step_retrieve_prescraped_content_blocks, { # in info diff steps
+    tgt_lang_dict = {'tgt_lang': tgt_lang} if tgt_lang else {}
+    tgt_lang = TGT_LANG
+
+    map_reduce_dict['step_get_en_content_blocks'] = SingletonStep(step_retrieve_prescraped_en_content_blocks, { # in info diff steps
         'version': '003', 
-        'lang': 'en',
         **en_bio_id_dict
     },)
-    map_reduce_dict['step_get_zh_content_blocks'] = SingletonStep(step_retrieve_prescraped_content_blocks, { # in info diff steps
+    map_reduce_dict['step_get_tgt_content_blocks'] = SingletonStep(step_retrieve_prescraped_tgt_content_blocks, { # in info diff steps
         'version': '003', 
-        'lang': 'zh',
-        **tgt_bio_id_dict
+        **tgt_bio_id_dict,
+        **tgt_lang_dict
     })
     ## Repeat, but for chinese
     map_reduce_dict['step_generate_facts'] = SingletonStep(step_generate_facts, { # in info diff steps
@@ -287,10 +286,10 @@ def get_en_tgt_info_diff_map_dict(en_bio_id=None, tgt_bio_id=None, person_name=N
         'content_blocks': 'step_get_en_content_blocks', 
         **person_name_dict
     })
-    map_reduce_dict['step_generate_facts_zh'] = SingletonStep(step_generate_facts, { # in info diff steps
+    map_reduce_dict['step_generate_facts_tgt'] = SingletonStep(step_generate_facts, { # in info diff steps
         'version': '002',
-        'lang_code': 'zh', 
-        'content_blocks': 'step_get_zh_content_blocks', 
+        'lang_code': tgt_lang, 
+        'content_blocks': 'step_get_tgt_content_blocks', 
         **person_name_dict
     })
     # map_reduce_dict['step_infer_pronoun'] = SingletonStep(step_infer_pronoun, {
@@ -298,23 +297,23 @@ def get_en_tgt_info_diff_map_dict(en_bio_id=None, tgt_bio_id=None, person_name=N
     #     'en_content_blocks': 'step_get_en_content_blocks' 
     # })
     #### 
-    map_reduce_dict['step_align_fact_paragraphs'] = SingletonStep(step_obtain_en_zh_paragraphs_associations, {
+    map_reduce_dict['step_align_fact_paragraphs'] = SingletonStep(step_obtain_en_tgt_paragraphs_associations, {
         'version': '003',
         'en_facts': 'step_generate_facts',
-        'zh_facts': 'step_generate_facts_zh'
+        'tgt_facts': 'step_generate_facts_tgt'
     })
     map_reduce_dict['step_union_fact_paragraphs'] = SingletonStep(step_union_alignments, {
         'version': '002',
         'unpruned_alignment_strns': 'step_align_fact_paragraphs',
-        'lang_code': 'zh'
+        'lang_code': tgt_lang,
     })
 
     map_reduce_dict['step_find_retrieval_candidates'] = SingletonStep(step_retrieve_potential_matches_en_tgt, {
         'version': '010',
         'en_facts': 'step_generate_facts',
-        'tgt_facts': 'step_generate_facts_zh',
+        'tgt_facts': 'step_generate_facts_tgt',
         'alignment_df': 'step_union_fact_paragraphs', 
-        'lang_code': 'zh',
+        'lang_code': tgt_lang,
         **en_bio_id_dict,
         **tgt_bio_id_dict,
         **person_name_dict,
@@ -325,7 +324,7 @@ def get_en_tgt_info_diff_map_dict(en_bio_id=None, tgt_bio_id=None, person_name=N
     map_reduce_dict['step_reasoning_intersection_label'] = SingletonStep(step_compute_info_gap_reasoning, {
         'version': '006',
         'model_name': 'gpt-4o',
-        'lang_code': 'zh',
+        'lang_code': tgt_lang,
         'info_gap_retrieval_dfs': 'step_find_retrieval_candidates',
         **person_name_dict
     })
@@ -339,10 +338,13 @@ def get_en_tgt_info_diff_map_dict(en_bio_id=None, tgt_bio_id=None, person_name=N
         'version': '002',
         'en_tgt_info_gaps': 'step_collapse_gpt_labels',
         'en_content_blocks': 'step_get_en_content_blocks',
-        'tgt_content_blocks': 'step_get_zh_content_blocks',
+        'tgt_content_blocks': 'step_get_tgt_content_blocks',
         'pronoun': None
     })
     return map_reduce_dict
+
+
+
 
 
 

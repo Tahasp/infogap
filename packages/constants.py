@@ -1,16 +1,56 @@
 from dotenv import dotenv_values
+TGT_LANG = 'bn'
+
+# Centralized language mappings
+LANG_MAPPINGS = {
+    "en": {"en": "English", "fr": "French", "ru": "Russian", "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "he": "Hebrew", "bn": "Bangla"},
+    "fr": {"en": "anglais", "fr": "français", "ru": "russe", "zh": "chinois", "ja": "japonais", "ko": "coréen", "he": "hébraïque", "bn": ""},
+    "ru": {"en": "английский", "fr": "французский", "ru": "русский", "zh": "китайский", "ja": "японский", "ko": "корейский", "he": "иврит", "bn": ""},
+    "zh": {"en": "英语", "fr": "法语", "ru": "俄语", "zh": "中文", "ja": "日语", "ko": "韩语", "he": "希伯来语", "bn": "孟加拉语"},
+    "ja": {"en": "英語", "fr": "フランス語", "ru": "ロシア語", "zh": "中国語", "ja": "日本語", "ko": "韓国語", "he": "ヘブライ語", "bn": "ベンガル語"},
+    "ko": {"en": "영어", "fr": "프랑스어", "ru": "러시아어", "zh": "중국어", "ja": "일본어", "ko": "한국어", "he": "히브리어","bn": "벵골어"},
+    "he": {"en": "אנגלית", "fr": "צרפתית", "ru": "רוסית", "zh": "סינית", "ja": "יפנית", "ko": "קוריאנית", "he": "עברית", "bn": "בנגלית"},
+    "bn": {"en": "ইংরেজি", "fr": "ফরাসি", "ru": "রুশ", "zh": "চীনা", "ja": "জাপানি", "ko": "কোরিয়ান", "he": "হিব্রু", "bn": "বাংলা"}
+}
+
+ASK_GPT_FACT_EXTRACTION_PROMPTS = {
+    "en": "Please break down the following paragraph into a list of independent facts. All facts should be placed in a stringified Python list.\n{paragraph}",
+    "fr": "Veuillez décomposer le paragraphe suivant en une liste de faits indépendants. Tous les faits doivent être placés dans une liste Python sous forme de chaîne de caractères.\n{paragraph}",
+    "ru": "Пожалуйста, разбейте следующий абзац на список независимых фактов. Все факты должны быть помещены в строковый список Python.\n{paragraph}",
+    "zh": "请将以下段落分解为一系列独立事实。所有事实都应放在字符串化的 Python 列表中。\n{paragraph}",
+    "ja": "以下の段落を独立した事実の列に分解し、すべての事実は文字列化された Python リストに配置する。\n{paragraph}",
+    "ko": "다음 단락을 독립적인 사실 목록으로 분류해 주십시오. 모든 사실은 문자열화된 Python 목록에 배치되어야 합니다.\n{paragraph}",
+    "he": "אנא חלק את הפסקה הבאה לרשימה של עובדות עצמאיות. יש למקם את כל העובדות ברשימת פיתון מחורזת.\n{paragraph}",
+    "bn": "অনুগ্রহ করে নিচের অনুচ্ছেদটি স্বাধীন তথ্যের তালিকায় ভেঙে দিন। সমস্ত তথ্য একটি স্ট্রিংফাইড পাইথন তালিকায় স্থাপন করা উচিত।.\n{paragraph}"
+}
+
+ASK_GPT_FACT_INTERSECTION_PROMPTS = {
+    "en": "Consider these English facts about {person_name}:\n{src_fact_context}.\nIs the last fact in the former list inferable from any of these lists of {tgt_language} facts?\n{tgt_fact_context}\nReturn a list containing ['yes' or 'no'] -- one response for each list of {tgt_language} facts. All responses should be placed in a stringified Python list. (e.g., ['yes', 'no', 'yes'])",
+    "fr": "Considérez ces faits français sur {person_name}:\n{src_fact_context}.\nEst le dernier fait de la liste inférable de l'une des listes de faits suivantes?\n{tgt_fact_context}\nRetournez une liste contenant ['yes' ou 'no'] -- une réponse pour chaque liste de faits {tgt_language}. Toutes les réponses yes/no doivent être placées dans une liste Python. (e.g., ['yes', 'no', 'yes'])",
+    "ru": "Рассмотрим эти факты на русском языке о {person_name}:\n{src_fact_context}.\nМожно ли вывести последний факт из одного из следующих списков фактов?\n{tgt_fact_context}\nВозвращает список, содержащий ['да' или 'нет'] — один ответ для каждого списка фактов {tgt_language}. Все ответы «да/нет» должны быть помещены в список строк Python. (например, ['да', 'нет', 'да'])",
+    "zh": "考虑以下关于 {tgt_person_name} 的中文事实：\n{src_fact_context}。\n前一个列表中的最后一个事实是否可以从以下这些事实列表中推断出来？\n{tgt_fact_context}\n返回一个包含 ['yes' 或 'no'] 的列表 -- 每个 {tgt_language} 事实列表都有一个 'yes' 或 'no' 响应。所有 'yes' 或 'no' 响应都应该放置在一个字符串化的 Python 列表中 (比如, ['yes', 'no', 'yes'])",
+    "ja": "以下の {person_name} に関する日本語の事実を考慮してください:\n{src_fact_context}。\nこのリストの最後の事実は、次のいずれかの事実リストから推論できますか?\n{tgt_fact_context}\n各 {tgt_language} の事実リストに対して ['yes' または 'no'] の応答リストを返してください。すべての yes/no の応答は、文字列化された Python リストの形式で返す必要があります。（例: ['yes', 'no', 'yes']）",
+    "ko": "다음 {person_name}에 대한 한국어 사실들을 고려하세요:\n{src_fact_context}。\n이전 목록의 마지막 사실이 다음 사실 목록 중 어느 하나로부터 추론될 수 있습니까?\n{tgt_fact_context}\n각 {tgt_language} 사실 목록에 대해 ['yes' 또는 'no']로 구성된 응답 리스트를 반환하세요. 모든 yes/no 응답은 문자열 형태의 Python 리스트로 반환해야 합니다. (예: ['yes', 'no', 'yes'])",
+    "he": "שקול את העובדות האלה על {person_name}:\n{src_fact_context}.\nהאם ניתן להסיק את העובדה האחרונה ברשימה הקודמת מכל אחת מרשימות העובדות הללו?\n{tgt_fact_context}\nהחזר רשימה המכילה ['כן' או 'לא'] -- תגובה אחת לכל רשימה של {tgt_language} עובדות. יש למקם את כל התשובות כן/לא במחרוזת המייצגת רשימה בפייתון. (לדוגמה, ['כן', 'לא', 'כן'])",
+    "bn": "{person_name}-এর সম্পর্কে নিম্নলিখিত ইংরেজি তথ্য বিবেচনা করুন:\n{src_fact_context}.\nউপরের তালিকার শেষ তথ্যটি কি নিম্নলিখিত {tgt_language} তথ্যের যে কোনো তালিকা থেকে অনুমান করা সম্ভব?\n{tgt_fact_context}\nএকটি তালিকা ফেরত দিন যাতে প্রতিটি {tgt_language} তথ্যের তালিকার জন্য ['yes' বা 'no'] থাকে। সব উত্তর একটি স্ট্রিংরূপী পাইথন তালিকায় থাকতে হবে। (যেমন, ['yes', 'no', 'yes'])"
+}
+
+
 TARGET_LANGUAGES = ['enwiki', 'kowiki', 'frwiki', 'eswiki', 'ruwiki']
 
 LGBT_EN_WORDS = ['gay', 'lesbian', 'bisexual', 'homosexual', 'transgender', 'transsexual', 'transexual', 'transvestite', 'transgendered', 'lgbt', 'lgb', 'lgbtqia', 'glbt', 'lgbtqqia', 'genderqueer', 'genderfluid', 'intersex']
 LGBT_FR_WORDS = ['LGBT', 'lgbt', 'homosexualité', 'homosexuel', 'homosexuelle', 'homosexuels', 'homosexeulles', 'lesbienne', 'mariage', 'lesbiennes']
 
 SCRATCH_DIR = dotenv_values(".env")["SCRATCH_DIR"]
+# CHANGE WHEN DIFFERENT DOMAIN
+BIO_SAVE_DIR = f"{SCRATCH_DIR}/wiki_food"
+# BIO_SAVE_DIR = f"{SCRATCH_DIR}/wiki_bios"
+
 HF_CACHE_DIR = f"{SCRATCH_DIR}/hf_cache"
 ANNOTATION_SAVE_PATH = f"{SCRATCH_DIR}/ethics_annotation_save"
 GPT_CACHE_LOCATION = f"{SCRATCH_DIR}/ethics-lgbt-gpt-cache"
 CONNOTATION_FLAN_SAVE_DIR  = f"{SCRATCH_DIR}/connotation_flan_t5"
 FACT_DECOMP_FLAN_SAVE_DIR  = f"{SCRATCH_DIR}/fact_decomp_flan_t5"
-BIO_SAVE_DIR = f"{SCRATCH_DIR}/wiki_bios"
 EVENT_SAVE_DIR = f"{SCRATCH_DIR}/wiki_events"
 EN_FR_BIO_NAME_CSVS = f"{SCRATCH_DIR}/bio_id_name.csv"
 EN_RU_BIO_NAME_CSV = f"{SCRATCH_DIR}/bio_id_name_ru.tsv"

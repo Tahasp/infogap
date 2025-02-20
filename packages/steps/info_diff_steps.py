@@ -70,17 +70,14 @@ def step_retrieve_en_content_blocks(en_bio_id: str,
 class BioFilenotFoundError(Exception):
     pass
 
-def step_retrieve_prescraped_content_blocks(en_bio_id, 
-                                            lang: str,
-                                              save_dir = BIO_SAVE_DIR,
-                                               **kwargs):
-    try:
-        with open(f"{save_dir}/{en_bio_id}_{lang}.pkl", 'rb') as f:
+def step_retrieve_prescraped_tgt_content_blocks(tgt_bio_id, tgt_lang: str, **kwargs):
+    try: 
+        logger.info(f"Retrieving {tgt_bio_id}_{tgt_lang} from {BIO_SAVE_DIR}")
+        with open(f"{BIO_SAVE_DIR}/{tgt_bio_id}_{tgt_lang}.pkl", 'rb') as f:
             return dill.load(f)
     except FileNotFoundError:
-        raise BioFilenotFoundError(f"Could not find the prescraped bio file for {en_bio_id}")
-
-
+        raise BioFilenotFoundError(f"Could not find the prescraped bio file for {tgt_bio_id}")
+    
 def step_retrieve_prescraped_en_content_blocks(en_bio_id, 
                                               save_dir = BIO_SAVE_DIR,
                                                **kwargs):
@@ -343,67 +340,13 @@ def extract_fact_decomp_list(response: str) -> List[str]:
     else:
         return response
 
-def step_generate_facts(content_blocks: List[Union[Paragraph,Header]], 
-                        lang_code: str,
-                        person_name: str,
-                        model_name: str = 'gpt-4o',
-                        **kwargs) -> List[List[str]]:
-    # TODO: need to update this to filter out headers.
-    all_facts = []
-    paragraphs = [block for block in content_blocks if isinstance(block, Paragraph)]
-    # client = load_tsvetshop_client() 
-    client = load_other_client()
-    ask_for_facts = partial(ask_gpt_for_facts, client, model_name)
-    fact_cache = check_gpt_fact_cache(person_name, lang_code)
-    total_num_tokens = 0
-    for paragraph in tqdm(paragraphs):
-        if paragraph.clean_text in fact_cache :
-            all_facts.append(FactParagraph(fact_cache[paragraph.clean_text]))
-            continue
-        elif paragraph.clean_text + "    *: premier" in fact_cache:
-            all_facts.append(FactParagraph(fact_cache[paragraph.clean_text + "    *: premier"]))
-        else:
-            try:
-                response, num_tokens = ask_for_facts(paragraph.clean_text, lang_code)
-            except BadRequestError as e:
-                sentences = sent_tokenize(paragraph.clean_text)
-                # get the error message from the exception
-                error_message = e.args[0]
-                logger.error(f"Content warning from openai for paragraph: {paragraph.clean_text}. The error message is: {error_message}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
-                all_facts.append(FactParagraph(sentences))
-                continue
-            try:
-                fact_str = extract_fact_decomp_list(response) 
-                fact_list = list(eval(fact_str))
-                # NOTE: this if the prompt is changed, the cache will *not* be updated. something to keep in mind.
-                fact_cache[paragraph.clean_text] = fact_list
-                all_facts.append(FactParagraph(fact_list))
-            except:
-                ipdb.set_trace()
-                sentences = sent_tokenize(paragraph.clean_text)
-                logger.warning(f"Could not parse facts from paragraph: {paragraph.clean_text}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
-                all_facts.append(FactParagraph(sentences))
-            # except:
-            #     logger.error(f"Could not parse facts from paragraph: {paragraph.clean_text}")
-            #     raise ValueError(f"Could not parse facts from paragraph: {paragraph.clean_text}")
-
-            total_num_tokens += num_tokens
-    assert len(all_facts) == len(paragraphs)
-    # log the number of tokens required to generate the facts for the person
-    write_gpt_fact_cache(person_name, lang_code, fact_cache)
-    logger.info(f"Total number of tokens required to generate the facts for {person_name} in {lang_code}: {total_num_tokens}")
-    # write the fact cache to a file
-    return all_facts
-
-
-
-# def step_generate_facts(content_blocks: List[str], 
+# #OLD
+# def step_generate_facts(content_blocks: List[Union[Paragraph,Header]], 
 #                         lang_code: str,
 #                         person_name: str,
 #                         model_name: str = 'gpt-4o',
 #                         **kwargs) -> List[List[str]]:
 #     # TODO: need to update this to filter out headers.
-#     ipdb.set_trace()
 #     all_facts = []
 #     paragraphs = [block for block in content_blocks if isinstance(block, Paragraph)]
 #     # client = load_tsvetshop_client() 
@@ -413,16 +356,18 @@ def step_generate_facts(content_blocks: List[Union[Paragraph,Header]],
 #     total_num_tokens = 0
 #     for paragraph in tqdm(paragraphs):
 #         if paragraph.clean_text in fact_cache :
-#             all_facts.append(FactParagraph(fact_cache[paragraph]))
+#             all_facts.append(FactParagraph(fact_cache[paragraph.clean_text]))
 #             continue
+#         elif paragraph.clean_text + "    *: premier" in fact_cache:
+#             all_facts.append(FactParagraph(fact_cache[paragraph.clean_text + "    *: premier"]))
 #         else:
 #             try:
-#                 response, num_tokens = ask_for_facts(paragraph, lang_code)
+#                 response, num_tokens = ask_for_facts(paragraph.clean_text, lang_code)
 #             except BadRequestError as e:
 #                 sentences = sent_tokenize(paragraph.clean_text)
 #                 # get the error message from the exception
 #                 error_message = e.args[0]
-#                 logger.error(f"Content warning from openai for paragraph: {paragraph}. The error message is: {error_message}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
+#                 logger.error(f"Content warning from openai for paragraph: {paragraph.clean_text}. The error message is: {error_message}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
 #                 all_facts.append(FactParagraph(sentences))
 #                 continue
 #             try:
@@ -434,7 +379,7 @@ def step_generate_facts(content_blocks: List[Union[Paragraph,Header]],
 #             except:
 #                 ipdb.set_trace()
 #                 sentences = sent_tokenize(paragraph.clean_text)
-#                 logger.warning(f"Could not parse facts from paragraph: {paragraph}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
+#                 logger.warning(f"Could not parse facts from paragraph: {paragraph.clean_text}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
 #                 all_facts.append(FactParagraph(sentences))
 #             # except:
 #             #     logger.error(f"Could not parse facts from paragraph: {paragraph.clean_text}")
@@ -447,6 +392,60 @@ def step_generate_facts(content_blocks: List[Union[Paragraph,Header]],
 #     logger.info(f"Total number of tokens required to generate the facts for {person_name} in {lang_code}: {total_num_tokens}")
 #     # write the fact cache to a file
 #     return all_facts
+
+
+#NEW
+def step_generate_facts(content_blocks: List[object], 
+                        lang_code: str,
+                        person_name: str,
+                        model_name: str = 'gpt-4o',
+                        **kwargs) -> List[List[str]]:
+    # TODO: need to update this to filter out headers.
+    ipdb.set_trace()
+    all_facts = []
+    paragraphs =  [block["paragraph"] for block in content_blocks if "paragraph" in block]
+    # client = load_tsvetshop_client() 
+    client = load_other_client()
+    ask_for_facts = partial(ask_gpt_for_facts, client, model_name)
+    fact_cache = check_gpt_fact_cache(person_name, lang_code)
+    total_num_tokens = 0
+    for paragraph in tqdm(paragraphs):
+        if paragraph in fact_cache :
+            all_facts.append(FactParagraph(fact_cache[paragraph]))
+            continue
+        else:
+            try:
+                response, num_tokens = ask_for_facts(paragraph, lang_code)
+            except BadRequestError as e:
+                sentences = sent_tokenize(paragraph)
+                # get the error message from the exception
+                error_message = e.args[0]
+                logger.error(f"Content warning from openai for paragraph: {paragraph}. The error message is: {error_message}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
+                all_facts.append(FactParagraph(sentences))
+                continue
+            try:
+                fact_str = extract_fact_decomp_list(response) 
+                fact_list = list(eval(fact_str))
+                # NOTE: this if the prompt is changed, the cache will *not* be updated. something to keep in mind.
+                fact_cache[paragraph] = fact_list
+                all_facts.append(FactParagraph(fact_list))
+            except:
+                ipdb.set_trace()
+                sentences = sent_tokenize(paragraph)
+                logger.warning(f"Could not parse facts from paragraph: {paragraph}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
+                all_facts.append(FactParagraph(sentences))
+            # except:
+            #     logger.error(f"Could not parse facts from paragraph: {paragraph}")
+            #     raise ValueError(f"Could not parse facts from paragraph: {paragraph}")
+
+            total_num_tokens += num_tokens
+    assert len(all_facts) == len(paragraphs)
+    # log the number of tokens required to generate the facts for the person
+    write_gpt_fact_cache(person_name, lang_code, fact_cache)
+    logger.info(f"Total number of tokens required to generate the facts for {person_name} in {lang_code}: {total_num_tokens}")
+    # write the fact cache to a file
+    return all_facts
+
 
 def _get_non_current_paragraph_facts(paragraph_index, all_facts: List[FactParagraph]):
     non_current_paragraphs = []
@@ -663,6 +662,51 @@ def step_obtain_en_ru_paragraphs_associations(step_name: str, version: str,
     assert en_fr_algn_strn.shape[0] == len(en_fact_df['paragraph_index'].unique())
     assert ru_en_algn_strn.shape[0] == len(ru_fact_df['paragraph_index'].unique())
     return en_fr_algn_strn, ru_en_algn_strn
+
+
+
+def step_obtain_en_tgt_paragraphs_associations(
+    step_name: str,
+    version: str,
+    en_facts: List[List[str]],
+    tgt_facts: List[List[str]],
+    **kwargs
+) -> Tuple[np.array, np.array]:
+    """
+    Generalized function to compute paragraph associations between English and a target language.
+    
+    Args:
+        step_name (str): Name of the step.
+        version (str): Version information.
+        en_facts (List[List[str]]): English facts.
+        tgt_facts (List[List[str]]): Target language facts.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        Tuple[np.array, np.array]: Alignment strength arrays.
+    """
+    model = SentenceTransformer('sentence-transformers/LaBSE', cache_folder=HF_CACHE_DIR) 
+    en_fact_df = _create_fact_df(en_facts)
+    tgt_fact_df = _create_fact_df(tgt_facts)
+    
+    def add_embed_column(fact_df: pl.DataFrame) -> pl.DataFrame:
+        """Adds a 'fact_embed' column containing sentence embeddings."""
+        return fact_df.with_columns(
+            pl.col("fact").map_elements(lambda fact: model.encode(fact)).alias("fact_embed")
+        )
+    
+    en_fact_df = add_embed_column(en_fact_df)
+    tgt_fact_df = add_embed_column(tgt_fact_df)
+    
+    en_tgt_algn_strn, tgt_en_algn_strn = compute_algn_strngths(en_fact_df, tgt_fact_df, "hubness_margin")
+    
+    assert en_tgt_algn_strn.shape[0] == len(en_fact_df["paragraph_index"].unique())
+    assert tgt_en_algn_strn.shape[0] == len(tgt_fact_df["paragraph_index"].unique())
+    
+    return en_tgt_algn_strn, tgt_en_algn_strn
+
+
+
 
 def step_union_alignments(unpruned_alignment_strns: Tuple[np.array, np.array], 
                           **kwargs) -> pl.DataFrame:
@@ -971,6 +1015,7 @@ def step_compute_info_gap_reasoning(info_gap_retrieval_dfs: Tuple[pd.DataFrame, 
                 progress.update(1)
                 return str(gpt_intersection_labels)
             except BadRequestError:
+                ipdb.set_trace()
                 progress.update(1)
                 logger.warning(f"Content warning for src_fact_context: {src_fact_context} and tgt_contexts: {tgt_contexts}.")
                 return 'failed due to content policy'
@@ -986,9 +1031,11 @@ def step_compute_info_gap_reasoning(info_gap_retrieval_dfs: Tuple[pd.DataFrame, 
     logger.info(f"Total number of tokens required to validate intersection labels for {person_name} in {lang_code}: {full_info_gap_num_tokens[lang_code]}")
     annotation_fn = partial(annotate_llm, en_fact_intersection_cache, 'en', lang_code, en_info_gap_df['person_name'][0], en_info_gap_df, tgt_info_gap_df)
     
-    
+    logger.debug(f"tgt_info_gap_df Schema: {tgt_info_gap_df.schema}")
+    logger.debug(f"tgt_info_gap_df Head:\n{tgt_info_gap_df.head(5)}")
     logger.debug(f"en_info_gap_df Schema: {en_info_gap_df.schema}")
     logger.debug(f"en_info_gap_df Head:\n{en_info_gap_df.head(5)}")
+    
     en_info_gap_df = en_info_gap_df.with_columns([
         pl.struct(['paragraph_index', 'fact_index',  'info_retrieval_mapping']).\
             map_elements(lambda row: annotation_fn(row['paragraph_index'], row['info_retrieval_mapping'], row['fact_index'])).\

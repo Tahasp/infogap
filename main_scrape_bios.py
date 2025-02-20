@@ -954,7 +954,17 @@ def make_lang_article_dict(en_article_title, en_lang, tgt_article_title, tgt_lan
     return {en_lang: en_article_title, tgt_lang: tgt_article_title}
 
 def process_wikipedia_text(text, lang, **kwargs):
-    ignore_headers = {"en": "See also", "zh": "参见", "fr": "Voir aussi"}
+    ignore_headers = {
+        "en": ["see also", "references", "external links"],
+        "zh": ["参见", "参考资料", "外部链接"],
+        "fr": ["voir aussi", "références"],
+        "ru": ["см. также", "литература"],
+        "ko": ["같이 보기", "참고 자료", "외부 링크"],
+        "ja": ["関連項目", "参考文献", "外部リンク"],
+        "he": ["מפיד", "הערות שוליים", "קישורים חיצוניים"],
+        "bn": ["আরও দেখুন", "তথ্যসূত্র", "বহিঃসংযোগ"]
+    }
+    
     lines = text.split('\n')  # Split by new line
     processed_paragraphs = []
     
@@ -965,8 +975,11 @@ def process_wikipedia_text(text, lang, **kwargs):
         header_match = re.match(r'^(=+)(.*?)=+$', line)
         if header_match:
             header_text = header_match.group(2).strip().lower()
-            if header_text == ignore_headers[lang]:
-                break  # Stop processing if 'reference' header is encountered
+            
+            # If the detected header is in the ignore list, stop processing
+            if lang in ignore_headers and header_text in ignore_headers[lang]:
+                break  
+            
             processed_paragraphs.append({"header": header_text})
             continue
         

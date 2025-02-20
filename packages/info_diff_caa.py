@@ -82,7 +82,7 @@ def forced_align(facts: List[str], sentences: str,
     return reconstructed
 
 def compute_hubness(paragraph: Paragraph, other_fact_blocks: pl.DataFrame, num_hubness_compute, model):
-    sents = sent_tokenize(paragraph.clean_text)
+    sents = sent_tokenize(paragraph)
     other_facts = other_fact_blocks['fact'].to_list()
     if other_facts== []: # if there is only one paragraph?
         return np.zeros(len(sents))
@@ -136,8 +136,8 @@ def step_forced_align_en_tgt_facts_to_paragraph(en_tgt_info_gaps, en_content_blo
                                         tgt_content_blocks: List[Union[Paragraph, Header]], 
                                         pronoun: str, **kwargs):
     # set en_paragraphs to all the elements of type Paragraph in en_content_blocks
-    en_paragraphs = [block for block in en_content_blocks if isinstance(block, Paragraph)]
-    tgt_paragraphs = [block for block in tgt_content_blocks if isinstance(block, Paragraph)]
+    en_paragraphs = [block["paragraph"] for block in en_content_blocks if "paragraph" in block]
+    tgt_paragraphs = [block["paragraph"] for block in tgt_content_blocks if "paragraph" in block]
     model = SentenceTransformer('sentence-transformers/LaBSE', cache_folder=HF_CACHE_DIR)
     en_info_gaps, tgt_info_gaps, alignment_dfs = [info_gap for info_gap in en_tgt_info_gaps]
 
@@ -152,7 +152,7 @@ def step_forced_align_en_tgt_facts_to_paragraph(en_tgt_info_gaps, en_content_blo
             # aligned_sentences = forced_align_fact_to_paragraph(paragraph_df, paragraphs[paragraph_index], paragraph_hubnesses, model)
 
             # TODO: need to do the hubness adjustment still.
-            aligned_sentences = forced_align(paragraph_df['fact'].to_list(), paragraphs[paragraph_index].clean_text, 
+            aligned_sentences = forced_align(paragraph_df['fact'].to_list(), paragraphs[paragraph_index], 
                                              paragraph_hubnesses,
                                              model)
             # add the aligned sentences to the paragraph_df
