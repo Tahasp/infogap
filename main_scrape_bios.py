@@ -15,6 +15,8 @@ from collections import OrderedDict
 from typing import Optional, List, Tuple, Iterable
 from functools import partial
 import loguru
+import unicodedata
+import urllib.parse
 
 from wikipedia_edit_scrape_tool import get_multilingual_wikilinks_mediawiki, Paragraph, DisambiguationPageError, Header, get_category
 from flowmason.flowmason import conduct, load_artifact, load_artifact_with_step_name, SingletonStep
@@ -953,6 +955,18 @@ def make_lang_article_dict(en_article_title, en_lang, tgt_article_title, tgt_lan
     # ipdb.set_trace()
     return {en_lang: en_article_title, tgt_lang: tgt_article_title}
 
+def clean_text(text):
+    # Remove unwanted Unicode control characters (invisible formatting marks)
+    text = re.sub(r'[\u200f\u200e\u200d\u202c\u202d\u202e\u2066\u2067\u2068\u2069]', '', text)
+    
+    # Normalize Unicode (e.g., convert é → é in a consistent form)
+    text = unicodedata.normalize('NFKC', text)
+    
+    # Remove non-printable characters but KEEP multilingual characters
+    text = re.sub(r'[^\x20-\x7E\u00A0-\uFFFF]', '', text)  # Keeps Unicode text
+
+    return text
+    
 def process_wikipedia_text(text, lang, **kwargs):
     ignore_headers = {
         "en": ["see also", "references", "external links"],
@@ -985,7 +999,9 @@ def process_wikipedia_text(text, lang, **kwargs):
         
         # Store paragraph if it meets length requirement
         elif len(line) >= 6:
+            line = clean_text(line)
             processed_paragraphs.append({"paragraph": line})
+
     
     return processed_paragraphs
 
@@ -1006,9 +1022,10 @@ def step_load_both_bios(lang_article_dict, **kwargs):
         logger.info(f"Successfully retrieved {len(text)} paragraphs for {lang} {article_title}")
         # Perform text processing on the retrieved blocks
         blocks = process_wikipedia_text(text, lang)
-        with open(f'{BIO_SAVE_DIR}/{article_title}_{lang}.pkl', 'wb') as f:
+        decoded_article_title = urllib.parse.unquote(article_title)
+        with open(f'{BIO_SAVE_DIR}/{decoded_article_title}_{lang}.pkl', 'wb') as f:
             dill.dump(blocks, f)
-        logger.info(f"Saved content blocks for {lang} {article_title}")
+        logger.info(f"Saved content blocks for {lang} {decoded_article_title}")
     progress.update(1)
     logger.info(f"The failed bio ids are: {failed_bio_ids}")
 

@@ -401,7 +401,7 @@ def step_generate_facts(content_blocks: List[object],
                         model_name: str = 'gpt-4o',
                         **kwargs) -> List[List[str]]:
     # TODO: need to update this to filter out headers.
-    ipdb.set_trace()
+
     all_facts = []
     paragraphs =  [block["paragraph"] for block in content_blocks if "paragraph" in block]
     # client = load_tsvetshop_client() 
@@ -995,6 +995,7 @@ def step_compute_info_gap_reasoning(info_gap_retrieval_dfs: Tuple[pd.DataFrame, 
         src_fact_context = src_info_gap_df.filter((pl.col('paragraph_index') == src_paragraph_index) & (pl.col('fact_index') <= fact_index))['fact'].to_list()[-NUM_CONTEXT_SRC:]
         tgt_contexts = []
         for tgt_index, margin in list(sorted(info_intersection_mapping, key=lambda x: x[1], reverse=True))[:NUM_RETRIEVALS]:
+            print(tgt_index, margin)
             try:
                 tgt_paragraph_index = tgt_info_gap_df.filter(pl.col('fact_index') == tgt_index)['paragraph_index'].to_list()[0]
             except IndexError:

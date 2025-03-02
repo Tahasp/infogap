@@ -7,6 +7,7 @@ from collections import OrderedDict
 from flowmason.flowmason import conduct, SingletonStep, load_artifact_with_step_name, MapReduceStep, load_mr_artifact
 import click
 import os
+import urllib.parse
 from tqdm import tqdm
 from sklearn.metrics import classification_report
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -36,7 +37,7 @@ logger = loguru.logger
 def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, **kwargs) -> pl.DataFrame:
     en_info_gap_df = pl.from_pandas(info_gap_dfs[0])
     tgt_info_gap_df = pl.from_pandas(info_gap_dfs[1])
-    
+    ipdb.set_trace()
     def get_annotation_frame(src_info_gap_df, tgt_info_gap_df):
         src_info_annotation_rows = []
         people_names = en_info_gap_df['person_name'].unique()
@@ -45,7 +46,7 @@ def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, 
             paragraph_indices = src_info_gap_df.filter(pl.col('person_name') == person_name)['paragraph_index'].unique().to_list()
             # sample a paragraph and then sample a fact from that paragraph until we hit num_facts_to_sample.
             num_sampled = 0
-            while num_sampled < min(num_facts_to_sample, len(paragraph_indices)):
+            while num_sampled < num_facts_to_sample:
                 paragraph_index = np.random.choice(paragraph_indices)
                 # sample a fact from the paragraph
                 fact_df = src_info_gap_df.filter(pl.col('person_name') == person_name).filter(pl.col('paragraph_index') == paragraph_index)\
@@ -57,6 +58,7 @@ def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, 
                 tgt_fact_indices = [
                     index for index, value in sorted(retrieval_mapping, key = lambda x: x[1], reverse=True)
                 ][:NUM_RETRIEVALS]  # need to take the top 2 here since that's what we use for the prediction?
+
                 tgt_contexts = []
                 for tgt_fact_index in tgt_fact_indices:
                     tgt_contexts.append(
@@ -85,13 +87,63 @@ def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, 
     tgt_annotation_frame = get_annotation_frame(tgt_info_gap_df, en_info_gap_df).with_columns([pl.lit(tgt_lang_code).alias('language')])
     return pl.concat([en_annotation_frame, tgt_annotation_frame]).sample(fraction=1.0, with_replacement=False, shuffle=True)
 
+
+def step_prep_annotation_frame_all_facts(info_gap_dfs, tgt_lang_code, intersection_label, **kwargs) -> pl.DataFrame:
+    en_info_gap_df = pl.from_pandas(info_gap_dfs[0])
+    tgt_info_gap_df = pl.from_pandas(info_gap_dfs[1])
+
+    def get_annotation_frame(src_info_gap_df, tgt_info_gap_df):
+        src_info_annotation_rows = []
+        people_names = src_info_gap_df['person_name'].unique()
+
+        for person_name in people_names:
+            person_facts = src_info_gap_df.filter(pl.col('person_name') == person_name)
+
+            for fact_row in person_facts.iter_rows(named=True):  # Iterate over all facts
+                src_fact_index = fact_row['fact_index']
+                paragraph_index = fact_row['paragraph_index']
+                retrieval_mapping = fact_row['info_retrieval_mapping']
+
+                # Sort retrieval mapping and take top NUM_RETRIEVALS
+                tgt_fact_indices = [
+                    index for index, value in sorted(retrieval_mapping, key=lambda x: x[1], reverse=True)
+                ][:NUM_RETRIEVALS]
+
+                tgt_contexts = [
+                    tgt_info_gap_df
+                    .filter((pl.col('fact_index') <= tgt_fact_index) & (pl.col('person_name') == person_name))['fact']
+                    .to_list()[-NUM_CONTEXT_TGT:] for tgt_fact_index in tgt_fact_indices
+                ]
+
+                src_context = src_info_gap_df.filter((pl.col('fact_index') <= src_fact_index) & 
+                                                     (pl.col('person_name') == person_name))['fact'].to_list()[-NUM_CONTEXT_SRC:]
+
+                fact_df = pl.DataFrame({
+                    "fact": [fact_row["fact"]],
+                    "fact_index": [fact_row["fact_index"]],
+                    "person_name": [fact_row["person_name"]],
+                    "src_context": [src_context],
+                    "tgt_contexts": [tgt_contexts],
+                    "paragraph_index": [fact_row["paragraph_index"]],
+                    intersection_label: [fact_row[intersection_label]]
+                })
+
+                src_info_annotation_rows.append(fact_df)
+
+        return pl.concat(src_info_annotation_rows)
+
+    en_annotation_frame = get_annotation_frame(en_info_gap_df, tgt_info_gap_df).with_columns([pl.lit('en').alias('language')])
+    tgt_annotation_frame = get_annotation_frame(tgt_info_gap_df, en_info_gap_df).with_columns([pl.lit(tgt_lang_code).alias('language')])
+
+    return pl.concat([en_annotation_frame, tgt_annotation_frame]).sample(fraction=1.0, with_replacement=False, shuffle=True)
+
 def  step_annotate_complete_tgt(annotation_frame: pl.DataFrame, 
                                **kwargs):
     # get today's date in form MM-DD
     # today_str= "03-06"
     today = datetime.today().date()
 
-    annotation_frame = load_save_if_nexists(annotation_frame, f"{ANNOTATION_SAVE_PATH}/annotation_{today}_{kwargs['topic']}.json")
+    annotation_frame = load_save_if_nexists(annotation_frame, f"{ANNOTATION_SAVE_PATH}/annotation_{today}_{kwargs['topic']}_{kwargs['tgt_lang']}.json")
     def ask_question(fact_row):
         context_str = fact_row['src_context']
         candidate_tgt_contexts = fact_row['tgt_contexts']
@@ -107,7 +159,7 @@ def  step_annotate_complete_tgt(annotation_frame: pl.DataFrame,
         question_fns=[ask_question],
         answer_validate_fn=[lambda answer: answer.lower() in ['yesa', 'yesr', 'no']],
     )
-    annotated_frame.write_json(f"{ANNOTATION_SAVE_PATH}/annotation_20f_{today}_{kwargs['topic']}.json")
+    # annotated_frame.write_json(f"{ANNOTATION_SAVE_PATH}/annotation_20f_{today}_{kwargs['topic']}.json")
     return
 
 @click.command()
@@ -251,8 +303,9 @@ def execute_complete_gpt_general():
     full_map_dict = OrderedDict()
     info_gap_map_dict = get_en_tgt_info_diff_map_dict()
     tgt_lang = TGT_LANG
-    en_bio_id = "Dosa (food)"
-    tgt_bio_id = "%E0%A6%A7%E0%A7%8B%E0%A6%B8%E0%A6%BE"
+    en_bio_id = "Wonton"
+    tgt_bio_id = ""
+    decoded_tgt_bio_id = urllib.parse.unquote(tgt_bio_id)
     # caa_map_dict = get_caa_map_dict_zh_gpt()
 
     # reduce_info_gaps,
@@ -278,15 +331,24 @@ def execute_complete_gpt_general():
         'tgt_bio_id',
         [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, AxisError]
     )
-    full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame, {
+    # full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame, {
+    #     'info_gap_dfs': 'map_step_compute_info_gap', 
+    #     'version': '003',
+    #     'tgt_lang_code': tgt_lang,
+    #     'intersection_label': 'gpt-4o_intersection_label',
+    # })
+
+    full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame_all_facts, {
         'info_gap_dfs': 'map_step_compute_info_gap', 
         'version': '003',
         'tgt_lang_code': tgt_lang,
         'intersection_label': 'gpt-4o_intersection_label',
     })
+
     full_map_dict['step_annotate_complete_tgt'] = SingletonStep(step_annotate_complete_tgt, {
         'annotation_frame': 'step_prep_annotation_frame',
         'topic': en_bio_id,
+        'tgt_lang': tgt_lang,
         'version': '001'
     })
     metadata = conduct(os.path.join(SCRATCH_DIR, f"full_cache_gpt_en_{tgt_lang}"), full_map_dict, f"en_{tgt_lang}_gpt_logs")

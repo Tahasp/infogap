@@ -297,17 +297,19 @@ def get_en_tgt_info_diff_map_dict(en_bio_id=None, tgt_bio_id=None, person_name=N
     #     'en_content_blocks': 'step_get_en_content_blocks' 
     # })
     #### 
+    # Paragraph Alignment, correcting for Hubness between paragraphs
     map_reduce_dict['step_align_fact_paragraphs'] = SingletonStep(step_obtain_en_tgt_paragraphs_associations, {
         'version': '003',
         'en_facts': 'step_generate_facts',
         'tgt_facts': 'step_generate_facts_tgt'
     })
+    # Generate the Adjacency matrix
     map_reduce_dict['step_union_fact_paragraphs'] = SingletonStep(step_union_alignments, {
         'version': '002',
         'unpruned_alignment_strns': 'step_align_fact_paragraphs',
         'lang_code': tgt_lang,
     })
-
+    # alighing facts based on the adjacency matrix, with correction for Hubness between facts
     map_reduce_dict['step_find_retrieval_candidates'] = SingletonStep(step_retrieve_potential_matches_en_tgt, {
         'version': '010',
         'en_facts': 'step_generate_facts',

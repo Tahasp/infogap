@@ -182,6 +182,9 @@ def construct_fact_intersection_prompt(src_lang: str, tgt_lang_code: str, src_fa
 #         return input_prompt, cache[input_prompt], 0 
 
 
+def format_fact_context(fact_context: List[str], lang_code: str) -> str:
+    formatted_facts = "\n".join(f"{i+1}. {fact}" for i, fact in enumerate(fact_context))
+    return formatted_facts
 
 def ask_gpt_about_fact_intersection(client, model_name, cache,  
                                     src_lang_code: str, tgt_lang_code: str,
@@ -195,15 +198,25 @@ def ask_gpt_about_fact_intersection(client, model_name, cache,
     if src_lang_code not in ASK_GPT_FACT_INTERSECTION_PROMPTS:
         raise ValueError(f"Invalid source language code: {src_lang_code}")
 
-    # Construct input prompt
+    formated_source_fact_context = format_fact_context(src_fact_context, src_lang_code)
+    # ipdb.set_trace()
+    if len(tgt_fact_context) == 1:
+        formated_tgt_fact_context = format_fact_context(tgt_fact_context[0], tgt_lang_code)
+    else:
+        logger.error(f"Invalid tgt_fact_context: {tgt_fact_context}, length: {len(tgt_fact_context)}")
+    if src_lang_code == 'en':
+        person_name = person_name
+    else:
+        person_name = tgt_person_name
     input_prompt = ASK_GPT_FACT_INTERSECTION_PROMPTS[src_lang_code].format(
         person_name=person_name,
         tgt_person_name=tgt_person_name,
-        src_fact_context=src_fact_context,
-        tgt_fact_context=tgt_fact_context,
+        src_fact_context=formated_source_fact_context,
+        tgt_fact_context=formated_tgt_fact_context,
         tgt_language=tgt_language
     )
-
+    print(input_prompt)
+    # Check if the input prompt is in the cache
     if input_prompt not in cache:
         message = [{"role": "user", "content": input_prompt}]
         
@@ -288,3 +301,4 @@ def prompt_gpt_4(client, valid_labels: List[str], prompt) -> Tuple[str, int]:
         logger.warning(f"Invalid response from GPT-4: [[{response_content}]] for prompt:\n\n {prompt}")
     response_total_tokens = response.usage.total_tokens
     return response_content, response_total_tokens
+
