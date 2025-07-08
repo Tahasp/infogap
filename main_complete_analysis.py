@@ -3,13 +3,15 @@ import numpy as np
 import ipdb
 import polars as pl
 from collections import OrderedDict
-from flowmason import conduct, SingletonStep, load_artifact_with_step_name, MapReduceStep, load_mr_artifact
+from flowmason import conduct, SingletonStep, load_artifact_with_step_name, MapReduceStep, load_mr_artifact, load_artifact_with_step_name
+from functools import partial
 import click
+from typing import List
 import os
 import numpy as np
 from tqdm import tqdm
 from sklearn.metrics import classification_report
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModelForSeq2SeqLM
 from sklearn.dummy import DummyClassifier
 from tqdm import tqdm
 import torch
@@ -23,10 +25,86 @@ from packages.steps.caa_steps import step_prep_for_caa, step_caa_multi_sentence,
 from packages.annotate import annotate_frame, load_save_if_nexists
 from packages.flan_query import ask_flan_about_fact_intersection, ask_mt5_about_fact_intersection
 # from packages.constants import ANNOTATION_SAVE_PATH, NUM_CONTEXT_SRC, NUM_CONTEXT_TGT, NUM_RETRIEVALS
-from packages.constants import NUM_CONTEXT_SRC, NUM_CONTEXT_TGT, NUM_RETRIEVALS, SCRATCH_DIR, CURRENT_EN_BIO_IDS, CURRENT_FR_BIO_IDS, CURRENT_PERSON_NAMES, ANNOTATION_SAVE_PATH, EN_FR_BIO_NAME_CSVS,\
-    EN_RU_BIO_NAME_CSV
+from packages.constants import NUM_CONTEXT_SRC, NUM_CONTEXT_TGT, NUM_RETRIEVALS, SCRATCH_DIR, CURRENT_EN_BIO_IDS,\
+    CURRENT_FR_BIO_IDS, CURRENT_PERSON_NAMES, ANNOTATION_SAVE_PATH, EN_FR_BIO_NAME_CSVS,\
+    EN_RU_BIO_NAME_CSV, HF_CACHE_DIR
 
 logger = loguru.logger
+fr_src_lang_nllb = 'fra_Latn'
+en_src_lang_nllb = 'eng_Latn'
+
+def translate_src_context(progress, model, tokenizer, src_context: List[str]) -> List[str]:
+    # translate the source context from English to French
+    src_translations = []
+    for sent in src_context:
+        src_encoded = model.generate(tokenizer(sent, return_tensors='pt').input_ids, 
+                                     forced_bos_token_id=tokenizer.lang_code_to_id[en_src_lang_nllb],
+                                     max_length=len(sent))
+        src_translation = tokenizer.batch_decode(src_encoded, skip_special_tokens=True)[0]
+        src_translations.append(src_translation)
+    progress.update(1)
+    return src_translations
+
+def translate_tgt_context(progress, model, tokenizer, tgt_contexts: List[List[str]]) -> List[str]:
+    # translate the target context from French to English
+    tgt_context_translations = [] # List[List[str]]
+    for tgt_context in tgt_contexts:
+        context_translation = []
+        for sent in tgt_context:
+            tgt_encoded = model.generate(tokenizer(sent, return_tensors='pt').input_ids, 
+                                        forced_bos_token_id=tokenizer.lang_code_to_id[en_src_lang_nllb],
+                                        max_length=len(sent))
+            tgt_translation = tokenizer.batch_decode(tgt_encoded, skip_special_tokens=True)[0]
+            context_translation.append(tgt_translation)
+        tgt_context_translations.append(context_translation)
+    progress.update(1)
+    return tgt_context_translations
+
+def add_src_translations(model, tokenizer, annotation_frame, translate_lang_code):
+    progress = tqdm(total=len(annotation_frame))
+    translate_src = partial(translate_src_context, progress, model, tokenizer)
+    annotation_frame = annotation_frame.with_columns(
+        pl.when(pl.col('language') == translate_lang_code)\
+            .then(pl.col('src_context').map_elements(translate_src))\
+            .otherwise(
+                pl.col('src_context')
+            ).alias('src_contexts_en_translation')
+    )
+    return annotation_frame
+
+def add_tgt_translations(model, tokenizer, annotation_frame):
+    progress = tqdm(total=len(annotation_frame))
+    translate_tgt = partial(translate_tgt_context, progress, model, tokenizer)
+    annotation_frame = annotation_frame.with_columns(
+        pl.when(pl.col('language') == 'en')\
+            .then(pl.col('tgt_contexts').map_elements(translate_tgt))\
+            .otherwise(
+                pl.col('tgt_contexts')
+            ).alias('tgt_contexts_en_translation')
+    )
+    return annotation_frame
+
+def step_add_translations_to_annotation_frame(annotation_frame, target_fname, overwrite=False, 
+                                       **kwargs):
+    tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", src_lang=fr_src_lang_nllb, cache_dir=HF_CACHE_DIR)
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", cache_dir=HF_CACHE_DIR)
+    if os.path.exists(target_fname) and not overwrite:
+        frame = pl.read_json(target_fname)
+    else:
+        # annotator_frame = annotation_frame.filter(pl.col('fact_in_tgt') != 'tbd')
+        annotation_frame = add_src_translations(model, tokenizer, annotation_frame, 'fr')
+        annotation_frame = add_tgt_translations(model, tokenizer, annotation_frame)
+        frame = annotation_frame
+    link_frame = pl.DataFrame({
+        'person_name': ['Abdellah Taïa', 'Gabriel Attal', 'Ellen DeGeneres', 'Frédéric Mitterrand', 'Alan Turing', 'Philippe Besson', 'Sophie Labelle', 'Caroline Mécary', 'Tim Cook', 'Kim Petras'],
+        'en_link': map(lambda x: f"en.wikipedia.org/wiki/{x}", ['Abdellah_Taïa', 'Gabriel_Attal', 'Ellen_DeGeneres', 'Frédéric_Mitterrand', 'Alan_Turing', 'Philippe_Besson', 'Sophie_Labelle', 'Caroline_Mécary', 'Tim_Cook', 'Kim_Petras']),
+        'fr_link': map(lambda x: f"fr.wikipedia.org/wiki/{x}", ['Abdellah_Taïa', 'Gabriel_Attal', 'Ellen_DeGeneres', 'Frédéric_Mitterrand', 'Alan_Turing', 'Philippe_Besson', 'Sophie_Labelle', 'Caroline_Mécary', 'Tim_Cook', 'Kim_Petras'])
+    })
+    if 'en_link' not in frame.columns:
+        frame = frame.join(link_frame, on='person_name')
+    frame.write_json(target_fname)
+    return frame
+
 def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, **kwargs) -> pl.DataFrame:
     en_info_gap_df = info_gap_dfs[0]
     tgt_info_gap_df = info_gap_dfs[1]
@@ -77,7 +155,8 @@ def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, 
         return pl.concat(src_info_annotation_rows)
     en_annotation_frame = get_annotation_frame(en_info_gap_df, tgt_info_gap_df).with_columns([pl.lit('en').alias('language')])
     tgt_annotation_frame = get_annotation_frame(tgt_info_gap_df, en_info_gap_df).with_columns([pl.lit(tgt_lang_code).alias('language')])
-    return pl.concat([en_annotation_frame, tgt_annotation_frame]).sample(fraction=1.0, with_replacement=False, shuffle=True)
+    concat_frame = pl.concat([en_annotation_frame, tgt_annotation_frame]).sample(fraction=1.0, with_replacement=False, shuffle=True)
+    return concat_frame
 
 def step_annotate_complete_tgt(annotation_frame: pl.DataFrame, 
                                **kwargs):
@@ -155,7 +234,14 @@ def execute_complete_gpt():
     # })
     full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame, {
         'info_gap_dfs': 'map_step_compute_info_gap', 
+        'tgt_lang_code': 'fr', 
+        'intersection_label': 'gpt-4_intersection_label',
         'version': '003'
+    })
+    full_map_dict['step_add_annotation_translations'] = SingletonStep(step_add_translations_to_annotation_frame, {
+        'annotation_frame': 'step_prep_annotation_frame', 
+        'target_fname': 'attal_annotation_frame.json',
+        'version': '001'
     })
     # full_map_dict['step_annotate_complete_tgt'] = SingletonStep(step_annotate_complete_tgt, {
     #     'annotation_frame': 'step_prep_annotation_frame',
@@ -163,7 +249,7 @@ def execute_complete_gpt():
     # })
     metadata = conduct(os.path.join(SCRATCH_DIR, "full_cache"), full_map_dict, "full_analysis_logs")
     info_gap_dfs = load_mr_artifact(metadata[0])
-    connotation_dfs = load_mr_artifact(metadata[-1])
+    connotation_dfs = load_mr_artifact(metadata[1])
     ipdb.set_trace()
 
 def _parse_response(response_raw):

@@ -18,7 +18,7 @@ from packages.annotate import annotate_frame
     ## If the fact is not present in the article, answer 'E'.
 ## It is up to your discretion to decide whether a fact is "mostly" present in the snippets or the article.
 
-ANNOTATION_FNAME = "scratch/ethics_annotation_save/sam_annotations_07-27.json" # TODO: set to whatever directory you want to save the annotations to
+ANNOTATION_FNAME = "attal_annotation_frame.json" # TODO: set to whatever directory you want to save the annotations to
 frame = pl.read_json(ANNOTATION_FNAME)
 
 def ask_question(fact_row):
@@ -54,7 +54,7 @@ def ask_question(fact_row):
     return full_prompt
 annotated_frame = annotate_frame(
     frame, # frame containing data to annotate 
-    num_samples=10, # number of samples to annotate in one setting
+    num_samples=10, # number of samples to annotate in one sitting
     annotation_columns=['sam_annotations'], # column to store the annotation in
     question_fns=[ask_question],
     answer_validate_fn=[lambda answer: answer in ['A', 'B', 'C', 'D', 'E']]
