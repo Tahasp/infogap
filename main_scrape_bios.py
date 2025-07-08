@@ -19,8 +19,8 @@ from wikipedia_edit_scrape_tool import get_multilingual_wikilinks_mediawiki, Par
 from flowmason import conduct, load_artifact, load_artifact_with_step_name, SingletonStep
 
 import loguru
-from packages.steps.info_diff_steps import step_retrieve_en_content_blocks,\
-    step_retrieve_fr_content_blocks, step_retrieve_ru_content_blocks, step_retrieve_prescraped_en_content_blocks
+from packages.steps.wiki_scrape_steps import step_retrieve_en_content_blocks,\
+    step_retrieve_fr_content_blocks, step_retrieve_ru_content_blocks
 from packages.constants import BIO_SAVE_DIR, SCRATCH_DIR
 
 logger = loguru.logger

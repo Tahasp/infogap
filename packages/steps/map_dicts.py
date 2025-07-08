@@ -51,7 +51,7 @@ def get_en_fr_info_diff_map_dict(en_bio_id=None, fr_bio_id=None, person_name=Non
         'version': '001',
         'en_content_blocks': 'step_get_en_content_blocks' 
     })
-    #### 
+    ##### X-FactAlign start
     map_reduce_dict['step_align_fact_paragraphs'] = SingletonStep(step_obtain_paragraphs_associations, {
         'version': '003',
         'en_facts': 'step_generate_facts',
@@ -71,7 +71,7 @@ def get_en_fr_info_diff_map_dict(en_bio_id=None, fr_bio_id=None, person_name=Non
         **fr_bio_id_dict,
         **person_name_dict
     })
-    ### 
+    ### X-FactAlign end
 
     map_reduce_dict['step_reasoning_intersection_label'] = SingletonStep(step_compute_info_gap_reasoning, {
         'version': '006',
