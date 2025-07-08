@@ -20,6 +20,9 @@ nltk
 python-dotenv
 wikidata
 pywikibot
+html2text
+lxml_html_clean
+requests_html
 pandas
 requests_html
 lxml_html_clean
