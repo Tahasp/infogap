@@ -8,6 +8,7 @@ soupsieve==1.8
 tqdm==4.31.1
 urllib3==1.24.1
 wikipedia==1.4.0
+numpy==1.23.5
 click==7.0
 ipdb
 polars==0.19.6
@@ -17,3 +18,13 @@ loguru
 sentence-transformers
 nltk
 python-dotenv
+wikidata
+pywikibot
+html2text
+lxml_html_clean
+requests_html
+pandas
+requests_html
+lxml_html_clean
+openai
+pyarrow

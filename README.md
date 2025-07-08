@@ -1,4 +1,6 @@
 # Contact
+Paper: https://aclanthology.org/2024.emnlp-main.384/
+
 Email: `fsamir@mail.ubc.ca`
 
 # Artifacts
@@ -31,7 +33,9 @@ The purpose of the `.env` is to set configuration environment variables specific
 `pip install -r requirements.txt` (It's possible I missed a couple of modules here, please submit a PR if you find that to be the case and I'll approve right away). 
 
 ## V. Scrape the articles you want.   
-With the `main_scrape_bios.py` module, you can scrape English articles and their French (`python main_scrape_bios.py scrape-french-bios`) and Russian (`python main_scrape_bios.py scrape-russian-bios`) counterparts. This will scrape all the bios from the LGBTBioCorpus (Park et al., 2021), and store them under `scratch/wiki_bios/`. It shouldn't be too difficult to replace it with the English wikipedia page IDs that you want. By page IDs, I'm referring to the string after `wiki` in `https://en.wikipedia.org/wiki/Gabriel_Attal` (in this case, it is Gabriel_Attal). For an example, I've uploaded Gabriel Attal's English and French biographies (`Gabriel_Attal_en.pkl` and `Gabriel_Attal_fr.pkl`) under `scratch/wiki_bios/`. We will use these as an example. 
+With the `main_scrape_bios.py` module, you can scrape English articles and their French (`python main_scrape_bios.py scrape-french-bios-lgbtbiocorpus`) and Russian (`python main_scrape_bios.py scrape-russian-bios-lgbtcorpus`) counterparts. This will scrape all the bios from the LGBTBioCorpus (Park et al., 2021), and store them under `scratch/wiki_bios/`. It shouldn't be too difficult to replace it with the English wikipedia page IDs that you want. By page IDs, I'm referring to the string after `wiki` in `https://en.wikipedia.org/wiki/Gabriel_Attal` (in this case, it is Gabriel_Attal). For an example, I've uploaded Gabriel Attal's English and French biographies (`Gabriel_Attal_en.pkl` and `Gabriel_Attal_fr.pkl`) under `scratch/wiki_bios/`. We will use these as an example. 
+
+If you just want to scrape a few biographies rather than the entire LGBTBioCorpus (Park et al., 2021), try using the `python main_scrape_bios.py scrape-ablation-bios` command. This will scrape 10 biographies, and store them under `scratch/wiki_bios`. 
 
 ## VI. Run the InfoGap pipeline. 
 We can run the En<->Fr InfoGap on using `python main_complete_analysis.py execute-complete-gpt`. When you go to the definition of this command, you'll see this code block:
@@ -62,9 +66,69 @@ The line `metadata = conduct(os.path.join(SCRATCH_DIR, "full_cache"), full_map_d
 (NOTE: we only tested it on biographies. On events with complex histories, like border conflicts, it may not be as reliable. At any rate, you'll want to evaluate the results for a couple of samples. More on that below). 
 
 ## VII. Evaluating InfoGap on your documents
-If you're using this for the first time, you should check that the InfoGap labels are reasonably aligned with your expectations. 
+If you're using this for the first time, you should definitely check that the InfoGap labels are reasonably aligned with your expectations. This is what the final two steps are for:
 
-- [ ] TODO: explain how to do the evaluation. 
+### Preparing the annotation frame
+```
+full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame, { # samples 10 facts from the InfoGap frame for each direction (20 in total)
+    'info_gap_dfs': 'map_step_compute_info_gap', 
+    'tgt_lang_code': 'fr', 
+    'intersection_label': 'gpt-4_intersection_label',
+    'version': '003'
+})
+full_map_dict['step_add_annotation_translations'] = SingletonStep(step_add_translations_to_annotation_frame, { # adds translations for {tgt_lang_code} using NLLB-200, in case you don't read {tgt_lang_code}
+    'annotation_frame': 'step_prep_annotation_frame', 
+    'target_fname': 'attal_annotation_frame.json',
+    'version': '001'
+})
+```
+### Performing annotations
+This will result in a JSON file that will store annotations; in this case, it is `attal_annotation_frame.json`, since we're using Gabriel Attals `En` and `Fr` pages as the running example. Then, running `python main_perform_annotation.py` should result in the following output in your terminal: 
+
+```
+2025-01-27 15:29:30.559 | INFO     | packages.annotate:annotate_frame:72 - Number of samples that are unannotated: 20
+  0%|                                                                                            | 0/10 [00:00<?, ?it/s]
+
+Consider the following fact(s) about Gabriel Attal:
+
+1. The French media speculated that Attal was a potential contender in the 2027 presidential election.
+2. On 16 January 2024, Attal made an announcement.
+3. Attal announced that he would not be seeking a vote of confidence in the National Assembly.
+
+
+Is the final fact present in the French Wikipedia article about Gabriel Attal (fr.wikipedia.org/wiki/Gabriel_Attal)?
+
+Here are some snippets from the French article:
+1. Emmanuel Macron a annoncé la dissolution de l'Assemblée le soir des élections européennes. (Emmanuel Macron announced the dissolution of the Assembly on the eve of the European elections.)
+2. Gabriel Attal n'a pas été consulté avant l'annonce de la dissolution de l'Assemblée. (Gabriel Attal was not consulted before the dissolution of the Assembly was announced.)
+
+1. Le 8 juillet 2024, Gabriel Attal remet sa démission et celle de son gouvernement au président de la République. (On 8 July 2024, Gabriel Attal submitted his resignation and that of his government to the President of the Republic.)
+2. Le président de la République refuse la démission de Gabriel Attal. (The President of the Republic refuses the resignation of Gabriel Attal.)
+
+
+A: covered by the snippets
+B: partly covered by the snippets
+C: covered by the article
+D: partly covered by the article
+E: Not in the article
+Answer (A/B/C/D/E):
+```
+How it works:
+- You read the source facts at the beginning. We provide up to two facts of previous context, but the fact of interest is the final one. In particular, whether that fact exists in the other language version.
+- Suppose it does exist in the other article:
+    - In this case, you will pick either A, B, C, D
+    - You pick A or B when the target fact is shown in the small set of snippets from the other language version
+    - Otherwise you pick C or D. To select C or D, you'll have to go through the other language version's article directly on Wikipedia and see if you can find the fact in there.
+- Otherwise, you pick E. 
+
+
+A few things to note:
+- You can see at the start of the annotation, the total number of samples in the annotation JSON that haven't been annotated (at the beginning this will be 20).
+- A progress bar that says 0/10. This may be confusing because there are 20 samples to be annotated. This is because I try to annotate 10 samples per sitting (each annotation is not easy since you may have to read the target article in full to see whether the fact is listed/inferrable or not. You can annotate more than 10 in one sitting by changing the `num_samples` parameter in the call to `annotate_frame` in `main_perform_annotation.py`.
+- When you finish all 10 (for the sitting), or Ctrl+C and exit, your annotations will be saved. Next time you run the annotation, the terminal output will show that you have `20-n` annotations to complete.
+- It's also instructive to read Section 2.3 of the [paper](https://arxiv.org/pdf/2410.04282) to understand the terminal content for each datapoint. 
+
+
 
 # Citation
 ```
