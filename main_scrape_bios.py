@@ -25,6 +25,8 @@ import loguru
 from packages.steps.info_diff_steps import step_retrieve_en_content_blocks,\
     step_retrieve_fr_content_blocks, step_retrieve_zh_content_blocks, step_retrieve_ru_content_blocks, step_retrieve_prescraped_en_content_blocks
 from packages.constants import BIO_SAVE_DIR, SCRATCH_DIR
+from packages.wikigap_topics_scrape import selected_topics
+from wiki_text_process_test.examine_cache import examine_cache
 
 logger = loguru.logger
 
@@ -920,9 +922,8 @@ def get_interlanguage_links(wikidata_id, **kwargs):
     url = f"https://www.wikidata.org/w/api.php?action=wbgetentities&ids={wikidata_id}&props=sitelinks/urls&format=json"
     response = requests.get(url)
     data = response.json()
-    
     sitelinks = data.get("entities", {}).get(wikidata_id, {}).get("sitelinks", {})
-    
+    # logger.info(f"Extracted sitelinks: {sitelinks}")
     language_links = {site: details['url'] for site, details in sitelinks.items()}
     return language_links
 
@@ -934,7 +935,9 @@ def extract_article_title_from_urls(urls, lang, **kwargs):
     if match:
         return match.group(1).replace("_", " ")
     else: 
+        print(url)
         logger.error(f"Can't extract title for url: {url}")
+        
     return None
 
 def get_wikipedia_text(article_title, lang, **kwargs):
@@ -970,7 +973,7 @@ def clean_text(text):
 def process_wikipedia_text(text, lang, **kwargs):
     ignore_headers = {
         "en": ["see also", "references", "external links"],
-        "zh": ["参见", "参考资料", "外部链接"],
+        "zh": ["参见", "参考资料", "参考文献", "外部链接"],
         "fr": ["voir aussi", "références"],
         "ru": ["см. также", "литература"],
         "ko": ["같이 보기", "참고 자료", "외부 링크"],
@@ -986,15 +989,16 @@ def process_wikipedia_text(text, lang, **kwargs):
         line = line.strip()
         
         # Detect headers using regex
-        header_match = re.match(r'^(=+)(.*?)=+$', line)
+        header_match = re.match(r'^(=+)(.*?)\1$', line)
         if header_match:
+            level = len(header_match.group(1)) - 1  # Count number of '=' to determine header level
             header_text = header_match.group(2).strip().lower()
             
             # If the detected header is in the ignore list, stop processing
             if lang in ignore_headers and header_text in ignore_headers[lang]:
                 break  
             
-            processed_paragraphs.append({"header": header_text})
+            processed_paragraphs.append({f"header_{level}": header_text})  # Store header with level
             continue
         
         # Store paragraph if it meets length requirement
@@ -1012,11 +1016,8 @@ def step_load_both_bios(lang_article_dict, **kwargs):
     except FileExistsError:
         pass
     progress = tqdm.tqdm(total=len(lang_article_dict))
-
     failed_bio_ids = []
-    
     for lang, article_title in lang_article_dict.items():
-
         logger.info(f"Retrieving content blocks for {lang} {article_title}")
         text = get_wikipedia_text(article_title, lang)
         logger.info(f"Successfully retrieved {len(text)} paragraphs for {lang} {article_title}")
@@ -1030,48 +1031,72 @@ def step_load_both_bios(lang_article_dict, **kwargs):
     logger.info(f"The failed bio ids are: {failed_bio_ids}")
 
 
-
 @click.command()
 def scrape_bios():
-    topic = input("Enter Wikipedia article title (e.g., Albert Einstein): ")
-    lang = input("Enter Wikipedia language code (default: en): ") or "en"
-    tgt_lang = input("Enter the targeted language you would like to scrape for this topic")
-    step_dict = OrderedDict()
-    step_dict['get_wikidata_id'] = SingletonStep(get_wikidata_id, {
-        'topic': topic,
-        'lang': lang, 
-        'version': '001'
-    })
-    step_dict['get_interlanguage_links'] = SingletonStep(get_interlanguage_links, {
-        'wikidata_id': 'get_wikidata_id',
-        'version': '001'
-    })
-    step_dict['extract_en_article_title_from_url'] = SingletonStep(extract_article_title_from_urls, {
-        'urls': 'get_interlanguage_links',
-        'lang': 'en',
-        'version': '001'
-    })
-    step_dict['extract_tgt_article_title_from_url'] = SingletonStep(extract_article_title_from_urls, {
-        'urls': 'get_interlanguage_links',
-        'lang': tgt_lang,
-        'version': '001'
-    })
-    step_dict['lang_article_dict'] = SingletonStep(make_lang_article_dict, {
-        'en_article_title': 'extract_en_article_title_from_url',
-        'en_lang': 'en',
-        'tgt_article_title': 'extract_tgt_article_title_from_url',
-        'tgt_lang': tgt_lang,
-        'version': '001'
+    tgt_lang = input("Enter the target language code you would like to scrape for these topics: ")
+    lang = "en"
+    en_tgt_title_pairs = []
 
-    })
-    step_dict['step_load_both_bios'] = SingletonStep(step_load_both_bios, {
-        'lang_article_dict': 'lang_article_dict',
-        'version': '001'
-    })
-    metadata = conduct(os.path.join(SCRATCH_DIR, "bio_scrape_cache"), step_dict, f"new_scrape_en_{tgt_lang}_bios")
+    for topic in selected_topics:
+        print(f"Processing topic: {topic}")
+        step_dict = OrderedDict()
+        step_dict['get_wikidata_id'] = SingletonStep(get_wikidata_id, {
+            'topic': topic,
+            'lang': lang,
+            'version': '001'
+        })
+        step_dict['get_interlanguage_links'] = SingletonStep(get_interlanguage_links, {
+            'wikidata_id': 'get_wikidata_id',
+            'version': '001'
+        })
+        step_dict['extract_en_article_title_from_url'] = SingletonStep(extract_article_title_from_urls, {
+            'urls': 'get_interlanguage_links',
+            'lang': 'en',
+            'version': '001'
+        })
+        step_dict['extract_tgt_article_title_from_url'] = SingletonStep(extract_article_title_from_urls, {
+            'urls': 'get_interlanguage_links',
+            'lang': tgt_lang,
+            'version': '001'
+        })
+        step_dict['lang_article_dict'] = SingletonStep(make_lang_article_dict, {
+            'en_article_title': 'extract_en_article_title_from_url',
+            'en_lang': 'en',
+            'tgt_article_title': 'extract_tgt_article_title_from_url',
+            'tgt_lang': tgt_lang,
+            'version': '001'
+        })
+        step_dict['step_load_both_bios'] = SingletonStep(step_load_both_bios, {
+            'lang_article_dict': 'lang_article_dict',
+            'version': '001'
+        })
+        metadata = conduct(
+            os.path.join(SCRATCH_DIR, "bio_scrape_cache"),
+            step_dict,
+            f"new_scrape_en_{tgt_lang}_bios_{topic.replace(' ', '_')}"
+        )
+        cache_path_src_title = metadata[2][1]['cache_path']
+        cache_path_tgt_title = metadata[3][1]['cache_path']
+        
+        src_title = examine_cache(cache_path_src_title)
+        decoded_src_title = urllib.parse.unquote(src_title)
+        tgt_title = examine_cache(cache_path_tgt_title)
+        decoded_tgt_title = urllib.parse.unquote(tgt_title)
+        en_tgt_title_pairs.append((decoded_src_title, decoded_tgt_title))
+    
+    output_path = f"/Users/anniewang/Desktop/infogap/packages/scraped_titles_{tgt_lang}.py"
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("# Auto-generated file containing (English, Target language) topic tuples\n\n")
+        f.write("en_tgt_title_pairs = [\n")
+        for en, tgt in en_tgt_title_pairs:
+            f.write(f"    ({repr(en)}, {repr(tgt)}),\n")
+        f.write("]\n")
 
-
-
+    print(f"\n✅ Saved {len(en_tgt_title_pairs)} topic pairs to {output_path}")
+    
+    
+        
+   
 
 
 @click.group()
@@ -1085,6 +1110,7 @@ main.add_command(scrape_ablation_bios)
 main.add_command(scrape_en_fr_bios)
 main.add_command(scrape_en_zh_bios) 
 
+# for CSCW'26 WikiGap
 main.add_command(scrape_bios)
 
 

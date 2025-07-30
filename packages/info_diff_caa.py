@@ -141,6 +141,7 @@ def step_forced_align_en_tgt_facts_to_paragraph(en_tgt_info_gaps, en_content_blo
     model = SentenceTransformer('sentence-transformers/LaBSE', cache_folder=HF_CACHE_DIR)
     en_info_gaps, tgt_info_gaps, alignment_dfs = [info_gap for info_gap in en_tgt_info_gaps]
 
+
     # NOTE: this function assumes that only a single bio is being processed at a time.
     progress = tqdm(total=len(en_info_gaps['paragraph_index'].unique()) + len(tgt_info_gaps['paragraph_index'].unique()))
     def _align_facts_to_gt_sentences(info_gap_df, paragraphs):
@@ -162,7 +163,9 @@ def step_forced_align_en_tgt_facts_to_paragraph(en_tgt_info_gaps, en_content_blo
         result_info_gap_df = pl.concat(algn_aug_info_gaps)
         return result_info_gap_df
     en_info_gaps = _align_facts_to_gt_sentences(en_info_gaps, en_paragraphs)
+
     tgt_info_gaps = _align_facts_to_gt_sentences(tgt_info_gaps, tgt_paragraphs)
+
     # add the pronoun to the info_gap_df
     en_info_gaps = en_info_gaps.with_columns(pl.lit(pronoun).alias('pronoun'))
     tgt_info_gaps = tgt_info_gaps.with_columns(pl.lit(pronoun).alias('pronoun'))

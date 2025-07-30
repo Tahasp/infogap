@@ -60,6 +60,7 @@ def main():
     print(f"Fetching content for: {topic} in {tgt_lang_wiki}")
     interlanguage_links = get_interlanguage_links(wikidata_id)
     if interlanguage_links[tgt_lang_wiki]:
+        print(f"Found Wikipedia article title: {interlanguage_links[tgt_lang_wiki]}")
         article_title = extract_title_from_url(interlanguage_links[tgt_lang_wiki])
         content = get_wikipedia_text(article_title, tgt_lang) 
         print("\nExtracted Wikipedia Content:\n")

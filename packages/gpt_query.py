@@ -109,7 +109,7 @@ def ask_gpt_for_facts(client, model_name: str, paragraph: str, lang_code: str):
     )
 
     response_content = response.choices[0].message.content
-    logger.info(f"GPT Response: {response_content}")
+    # logger.info(f"GPT Response: {response_content}")
 
     return response_content, response.usage.total_tokens
 
@@ -215,7 +215,7 @@ def ask_gpt_about_fact_intersection(client, model_name, cache,
         tgt_fact_context=formated_tgt_fact_context,
         tgt_language=tgt_language
     )
-    print(input_prompt)
+    # print(input_prompt)
     # Check if the input prompt is in the cache
     if input_prompt not in cache:
         message = [{"role": "user", "content": input_prompt}]

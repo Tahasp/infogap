@@ -63,7 +63,7 @@ def step_retrieve_en_content_blocks(en_bio_id: str,
     content_blocks = get_text(en_link, 'enwiki')
     # filter out paragraphs where the clean_text attribute string has fewer than 6 words.
     content_blocks = list(filter(lambda x: not (isinstance(x, Paragraph) and len(x.clean_text.split()) < 6), content_blocks))
-    logger.info(f"Retrieved {len(content_blocks)} paragraphs from {en_link}")
+    # logger.info(f"Retrieved {len(content_blocks)} paragraphs from {en_link}")
 
     return content_blocks 
 
@@ -72,7 +72,7 @@ class BioFilenotFoundError(Exception):
 
 def step_retrieve_prescraped_tgt_content_blocks(tgt_bio_id, tgt_lang: str, **kwargs):
     try: 
-        logger.info(f"Retrieving {tgt_bio_id}_{tgt_lang} from {BIO_SAVE_DIR}")
+        # logger.info(f"Retrieving {tgt_bio_id}_{tgt_lang} from {BIO_SAVE_DIR}")
         with open(f"{BIO_SAVE_DIR}/{tgt_bio_id}_{tgt_lang}.pkl", 'rb') as f:
             return dill.load(f)
     except FileNotFoundError:
@@ -430,7 +430,7 @@ def step_generate_facts(content_blocks: List[object],
                 fact_cache[paragraph] = fact_list
                 all_facts.append(FactParagraph(fact_list))
             except:
-                ipdb.set_trace()
+                # ipdb.set_trace()
                 sentences = sent_tokenize(paragraph)
                 logger.warning(f"Could not parse facts from paragraph: {paragraph}. Used sentence tokenization instead; there are {len(sentences)} sentences.")
                 all_facts.append(FactParagraph(sentences))
@@ -995,7 +995,7 @@ def step_compute_info_gap_reasoning(info_gap_retrieval_dfs: Tuple[pd.DataFrame, 
         src_fact_context = src_info_gap_df.filter((pl.col('paragraph_index') == src_paragraph_index) & (pl.col('fact_index') <= fact_index))['fact'].to_list()[-NUM_CONTEXT_SRC:]
         tgt_contexts = []
         for tgt_index, margin in list(sorted(info_intersection_mapping, key=lambda x: x[1], reverse=True))[:NUM_RETRIEVALS]:
-            print(tgt_index, margin)
+            # print(tgt_index, margin)
             try:
                 tgt_paragraph_index = tgt_info_gap_df.filter(pl.col('fact_index') == tgt_index)['paragraph_index'].to_list()[0]
             except IndexError:
@@ -1010,9 +1010,9 @@ def step_compute_info_gap_reasoning(info_gap_retrieval_dfs: Tuple[pd.DataFrame, 
                     if input_prompt in cache:
                         logger.info(f"Cache hit with input prompt: {input_prompt}")
                 gpt_intersection_labels = response
-                logger.info(f"Intersection labels: {gpt_intersection_labels}")
+                # logger.info(f"Intersection labels: {gpt_intersection_labels}")
                 # log the number of tokens required to validate intersection labels for the person
-                logger.info(f"{total_num_tokens}")
+                # logger.info(f"{total_num_tokens}")
                 progress.update(1)
                 return str(gpt_intersection_labels)
             except BadRequestError:

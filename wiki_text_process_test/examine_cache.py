@@ -6,6 +6,24 @@ import hashlib
 
 logger = logging.getLogger(__name__)
 
+
+def examine_cache(cache_path):
+    # Check if the cache file exists
+    if not os.path.exists(cache_path):
+        logger.error(f"Cache file not found: {cache_path}")
+        return None
+
+    # Load and return the cached result
+    try:
+        with open(cache_path, 'rb') as f:
+            cached_result = dill.load(f)
+        logger.info(f"Successfully loaded cache from {cache_path}")
+        return cached_result
+    except Exception as e:
+        logger.error(f"Error loading cache from {cache_path}: {e}")
+        return None
+
+
 def examine_cache_result(cache_dir: str, cache_name: str):
     """
     Examines the cache result stored in `cache_dir` for a given step.
@@ -51,8 +69,9 @@ def display_cache_as_table(result):
 
 
 # Example usage:
-cache_directory = "/Users/anniewang/Desktop/infogap/scratch/full_cache_gpt_en_he/"  # Change this to your actual cache directory
-cache_name = "b7c4baca7dd0777dc5eb709036df5d0676c42fc4dfd1de24152796fcc87a785c"
+cache_directory = "/Users/anniewang/Desktop/infogap/scratch/full_cache_gpt_en_zh/"  # Change this to your actual cache directory
+cache_name = "9c6b24f5f9c3abf10d6c32902a4f82bc8bd17cb939651c5049de7504d7af0e3c"
+
 result = examine_cache_result(cache_directory, cache_name)
 
 print(result)

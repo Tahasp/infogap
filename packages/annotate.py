@@ -121,17 +121,17 @@ def annotate_frame(frame: pl.DataFrame, num_samples,
 
 def load_save_if_nexists(df: pl.DataFrame, path: str):
         # save the en_intersection_contexts and fr_intersection_contexts as a string by joining with a newline
-        if (not os.path.exists(path)):
-            df.write_json(path)
-        else:
-            # df = pl.read_csv(path)
-            # ask the user if we should overwrite the file
-            overwrite = input(f"File {path} already exists. Overwrite? (y/n): ")
-            if overwrite == 'y':
-                # ask the user if they are sure
-                overwrite = input(f"Are you sure you want to overwrite {path}? (y/n): ")
-                if overwrite == 'y':
-                    df.write_json(path)
-            else:
-                df = pl.read_json(path)
+        # if (not os.path.exists(path)):
+        df.write_json(path)
+        # else:
+        #     # df = pl.read_csv(path)
+        #     # ask the user if we should overwrite the file
+        #     overwrite = input(f"File {path} already exists. Overwrite? (y/n): ")
+        #     if overwrite == 'y':
+        #         # ask the user if they are sure
+        #         overwrite = input(f"Are you sure you want to overwrite {path}? (y/n): ")
+        #         if overwrite == 'y':
+        #             df.write_json(path)
+        #     else:
+        #         df = pl.read_json(path)
         return df

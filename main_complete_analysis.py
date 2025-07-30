@@ -27,6 +27,9 @@ from packages.flan_query import ask_flan_about_fact_intersection, ask_mt5_about_
 # from packages.constants import ANNOTATION_SAVE_PATH, NUM_CONTEXT_SRC, NUM_CONTEXT_TGT, NUM_RETRIEVALS
 from packages.constants import NUM_CONTEXT_SRC, NUM_CONTEXT_TGT, NUM_RETRIEVALS, SCRATCH_DIR, CURRENT_EN_BIO_IDS, CURRENT_FR_BIO_IDS, CURRENT_PERSON_NAMES, ANNOTATION_SAVE_PATH, EN_FR_BIO_NAME_CSVS,\
     EN_RU_BIO_NAME_CSV, TGT_LANG
+
+
+    
 try:
     from numpy import AxisError
 except ImportError:
@@ -37,7 +40,7 @@ logger = loguru.logger
 def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, **kwargs) -> pl.DataFrame:
     en_info_gap_df = pl.from_pandas(info_gap_dfs[0])
     tgt_info_gap_df = pl.from_pandas(info_gap_dfs[1])
-    ipdb.set_trace()
+
     def get_annotation_frame(src_info_gap_df, tgt_info_gap_df):
         src_info_annotation_rows = []
         people_names = en_info_gap_df['person_name'].unique()
@@ -103,15 +106,23 @@ def step_prep_annotation_frame_all_facts(info_gap_dfs, tgt_lang_code, intersecti
                 src_fact_index = fact_row['fact_index']
                 paragraph_index = fact_row['paragraph_index']
                 retrieval_mapping = fact_row['info_retrieval_mapping']
+                aligned_sentence = fact_row['aligned_sentence']
+                # ipdb.set_trace()
 
                 # Sort retrieval mapping and take top NUM_RETRIEVALS
                 tgt_fact_indices = [
                     index for index, value in sorted(retrieval_mapping, key=lambda x: x[1], reverse=True)
                 ][:NUM_RETRIEVALS]
-
+                # ipdb.set_trace()
                 tgt_contexts = [
                     tgt_info_gap_df
                     .filter((pl.col('fact_index') <= tgt_fact_index) & (pl.col('person_name') == person_name))['fact']
+                    .to_list()[-NUM_CONTEXT_TGT:] for tgt_fact_index in tgt_fact_indices
+                ]
+                # ipdb.set_trace()
+                tgt_fact_aligned_sentences = [
+                    tgt_info_gap_df
+                    .filter((pl.col('fact_index') <= tgt_fact_index) & (pl.col('person_name') == person_name))['aligned_sentence']
                     .to_list()[-NUM_CONTEXT_TGT:] for tgt_fact_index in tgt_fact_indices
                 ]
 
@@ -122,10 +133,13 @@ def step_prep_annotation_frame_all_facts(info_gap_dfs, tgt_lang_code, intersecti
                     "fact": [fact_row["fact"]],
                     "fact_index": [fact_row["fact_index"]],
                     "person_name": [fact_row["person_name"]],
+                    "fact_aligned_sentence": [aligned_sentence],
                     "src_context": [src_context],
                     "tgt_contexts": [tgt_contexts],
+                    "tgt_fact_indices": [tgt_fact_indices],
+                    "tgt_fact_aligned_sentences": [tgt_fact_aligned_sentences],
                     "paragraph_index": [fact_row["paragraph_index"]],
-                    intersection_label: [fact_row[intersection_label]]
+                    "intersection_label": [fact_row[intersection_label]]
                 })
 
                 src_info_annotation_rows.append(fact_df)
@@ -142,24 +156,25 @@ def  step_annotate_complete_tgt(annotation_frame: pl.DataFrame,
     # get today's date in form MM-DD
     # today_str= "03-06"
     today = datetime.today().date()
+    load_save_if_nexists(annotation_frame, f"{ANNOTATION_SAVE_PATH}/wikigap_data/annotation_{today}_{kwargs['topic']}_{kwargs['tgt_lang']}.json")
 
-    annotation_frame = load_save_if_nexists(annotation_frame, f"{ANNOTATION_SAVE_PATH}/annotation_{today}_{kwargs['topic']}_{kwargs['tgt_lang']}.json")
-    def ask_question(fact_row):
-        context_str = fact_row['src_context']
-        candidate_tgt_contexts = fact_row['tgt_contexts']
-        tgt_contexts_str = '\n'.join([str(context) for context in candidate_tgt_contexts])
-        tgt_lang = 'French' if fact_row['language'] == 'en' else 'English'
-        question = f"\n\nConsider the following fact(s) about {fact_row['person_name']}:\n\n{context_str}\n\nIs the final fact present in the {tgt_lang} Wikipedia article about {fact_row['person_name']}?\n\nHere are some snippets from the {tgt_lang} article:\n {tgt_contexts_str}\n\n( yesa / yesr / no ): "
-        return question
+    # load_save_if_nexists(annotation_frame, f"{ANNOTATION_SAVE_PATH}/annotation_{today}_{kwargs['topic']}_{kwargs['tgt_lang']}.json")
+    # # def ask_question(fact_row):
+    # #     context_str = fact_row['src_context']
+    # #     candidate_tgt_contexts = fact_row['tgt_contexts']
+    # #     tgt_contexts_str = '\n'.join([str(context) for context in candidate_tgt_contexts])
+    # #     tgt_lang = 'French' if fact_row['language'] == 'en' else 'English'
+    # #     question = f"\n\nConsider the following fact(s) about {fact_row['person_name']}:\n\n{context_str}\n\nIs the final fact present in the {tgt_lang} Wikipedia article about {fact_row['person_name']}?\n\nHere are some snippets from the {tgt_lang} article:\n {tgt_contexts_str}\n\n( yesa / yesr / no ): "
+    # #     return question
 
-    annotated_frame = annotate_frame(
-        annotation_frame, # frame containing data to annotate 
-        num_samples=10, # number of samples to annotate in one setting
-        annotation_columns=['fact_in_tgt'], # column to store the annotation in
-        question_fns=[ask_question],
-        answer_validate_fn=[lambda answer: answer.lower() in ['yesa', 'yesr', 'no']],
-    )
-    # annotated_frame.write_json(f"{ANNOTATION_SAVE_PATH}/annotation_20f_{today}_{kwargs['topic']}.json")
+    # # annotated_frame = annotate_frame(
+    # #     annotation_frame, # frame containing data to annotate 
+    # #     num_samples=10, # number of samples to annotate in one setting
+    # #     annotation_columns=['fact_in_tgt'], # column to store the annotation in
+    # #     question_fns=[ask_question],
+    # #     answer_validate_fn=[lambda answer: answer.lower() in ['yesa', 'yesr', 'no']],
+    # # )
+    # # # annotated_frame.write_json(f"{ANNOTATION_SAVE_PATH}/annotation_20f_{today}_{kwargs['topic']}.json")
     return
 
 @click.command()
@@ -304,7 +319,7 @@ def execute_complete_gpt_general():
     info_gap_map_dict = get_en_tgt_info_diff_map_dict()
     tgt_lang = TGT_LANG
     en_bio_id = "Wonton"
-    tgt_bio_id = ""
+    tgt_bio_id = "Вонтоны"
     decoded_tgt_bio_id = urllib.parse.unquote(tgt_bio_id)
     # caa_map_dict = get_caa_map_dict_zh_gpt()
 
@@ -816,6 +831,165 @@ def assess_flan_on_annotations(language):
     ipdb.set_trace()
 
 
+###############################################################################
+# If you already have a function like 'execute_complete_gpt_general'
+# and want to adapt it to handle a single (en_bio_id, tgt_bio_id), you
+# can create a helper function like this:
+###############################################################################
+
+def run_complete_gpt_pipeline(en_bio_id, tgt_bio_id):
+    """
+    Runs the GPT pipeline for a single (en_bio_id, tgt_bio_id) pair.
+    Returns a tuple: (en_bio_id, tgt_bio_id, success, error_message)
+    """
+
+    tgt_lang = TGT_LANG
+    try:
+        # ---------------------------
+        # Step 1: map_step_compute_info_gap
+        # ---------------------------
+        info_gap_map_dict = get_en_tgt_info_diff_map_dict()
+        decoded_tgt_bio_id = urllib.parse.unquote(tgt_bio_id)
+
+        full_map_dict = OrderedDict()
+        full_map_dict['map_step_compute_info_gap'] = MapReduceStep(
+            info_gap_map_dict,
+            {
+                'en_bio_id': [en_bio_id],
+                'tgt_bio_id': [tgt_bio_id],
+                'person_name': [en_bio_id],
+                'tgt_person_name': [tgt_bio_id],
+                'tgt_lang': [tgt_lang]
+            },
+            {'version': '003'},
+            reduce_info_gaps,
+            'tgt_bio_id',
+            [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, AxisError]
+        )
+
+        # ---------------------------
+        # Step 2: step_prep_annotation_frame
+        # ---------------------------
+        full_map_dict['step_prep_annotation_frame'] = SingletonStep(
+            step_prep_annotation_frame_all_facts,
+            {
+                'info_gap_dfs': 'map_step_compute_info_gap',
+                'version': '004',
+                'tgt_lang_code': tgt_lang,
+                'topic': en_bio_id,
+                'intersection_label': 'gpt-4o_intersection_label',
+            }
+        )
+
+        # ---------------------------
+        # Step 3: step_annotate_complete_tgt
+        # ---------------------------
+        full_map_dict['step_annotate_complete_tgt'] = SingletonStep(
+            step_annotate_complete_tgt,
+            {
+                'annotation_frame': 'step_prep_annotation_frame',
+                'topic': en_bio_id,
+                'tgt_lang': tgt_lang,
+                'version': '002'
+            }
+        )
+
+        # ---------------------------
+        # Conduct the pipeline
+        # ---------------------------
+        metadata = conduct(
+            os.path.join(SCRATCH_DIR, f"full_cache_gpt_en_{tgt_lang}"),
+            full_map_dict,
+            f"en_{tgt_lang}_gpt_logs"
+        )
+
+        # Load results
+        info_gap_dfs = load_mr_artifact(metadata[0])
+
+        # If everything succeeded
+        return (en_bio_id, tgt_bio_id, True, None)
+
+    except Exception as e:
+        # Return failure info
+        return (en_bio_id, tgt_bio_id, False, str(e))
+###############################################################################
+# Next, define a Click command that loops over a list of (en_bio_id, tgt_bio_id)
+###############################################################################
+
+# @click.command()
+# def run_multiple_topics():
+#     """
+#     Example CLI command that iterates over multiple
+#     (en_bio_id, tgt_bio_id) tuples and runs the pipeline.
+#     """
+
+#     # Hard-coded list of tuples for demonstration;
+#     # Alternatively, you can load these from a file or command line arguments.
+#     topics = [("Oolong", "乌龙茶")]
+
+#     # We will write failures and successes to 'output.txt'
+#     # in append mode to get real-time writes.
+#     with open("output.txt", "a", encoding="utf-8") as f:
+#         for en_bio_id, tgt_bio_id in topics:
+#             try:
+#                 run_complete_gpt_pipeline(en_bio_id, tgt_bio_id, f)
+#             except Exception:
+#                 # We already logged the failure in run_complete_gpt_pipeline,
+#                 # but you could do additional handling here if needed.
+#                 continue
+
+
+import concurrent.futures
+def process_topic(en_bio_id, tgt_bio_id):
+    try:
+        # run_complete_gpt_pipeline already handles everything
+        # but let's say it returns True or raises an error
+        run_complete_gpt_pipeline(en_bio_id, tgt_bio_id)
+        return (en_bio_id, tgt_bio_id, True, None)
+    except Exception as e:
+        return (en_bio_id, tgt_bio_id, False, str(e))
+
+@click.command()
+def run_multiple_topics():
+    # topics = TOPICS
+    # topics = [("Oolong", "Улун")]
+    # #("Oolong", "乌龙茶")
+    # #("Oolong", "Улун"),("Oolong", "Thé Oolong")
+    # from packages.scraped_titles_fr import en_tgt_title_pairs
+    from packages.scraped_titles_zh import en_tgt_title_pairs
+    topics = en_tgt_title_pairs
+
+    # Decide how many workers you want. E.g., 4 parallel processes:
+    max_workers = 1
+
+    # Open the output.txt once in append mode:
+    with open("output.txt", "a", encoding="utf-8") as f, \
+        concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+
+        # Submit each topic to the executor
+        future_to_topic = {
+            executor.submit(process_topic, en_bio_id, tgt_bio_id): (en_bio_id, tgt_bio_id)
+            for (en_bio_id, tgt_bio_id) in topics
+        }
+
+        # As each task completes, log success/failure
+        for future in concurrent.futures.as_completed(future_to_topic):
+            en_bio_id, tgt_bio_id = future_to_topic[future]
+            try:
+                en_bio_id, tgt_bio_id, success, error_message = future.result()
+                if success:
+                    f.write(f"[SUCCESS] Topic: {en_bio_id}, {tgt_bio_id}\n")
+                else:
+                    f.write(f"[FAIL] Topic: {en_bio_id}, {tgt_bio_id}\n  Error: {error_message}\n")
+            except Exception as exc:
+                # Catch any other weird failures
+                f.write(f"[FAIL] Unexpected error. Topic: {en_bio_id}, {tgt_bio_id}\n")
+            f.flush()  # flush immediately so we don’t lose logs
+
+
+
+
+
 @click.group()
 def main():
     pass
@@ -830,6 +1004,9 @@ main.add_command(execute_complete_mt5_en_ru)
 main.add_command(execute_paragraph_align_ablation)
 main.add_command(execute_entailment_baseline)
 main.add_command(assess_flan_on_annotations)
+
+# For CSCW'26 WikiGap
+main.add_command(run_multiple_topics)
 
 if __name__ == '__main__':
     main()

@@ -1,5 +1,5 @@
 from dotenv import dotenv_values
-TGT_LANG = 'fr'
+TGT_LANG = 'zh'
 
 # Centralized language mappings
 LANG_MAPPINGS = {
