@@ -18,8 +18,7 @@ logger = loguru.logger
 # ---------------------------
 # 1) GLOBALS & CONFIG
 # ---------------------------
-BIO_SAVE_DIR = "/Users/anniewang/Desktop/infogap/scratch/wiki_food"
-URL_ENDPOINT = "https://ubcnlpgpt4.openai.azure.com/"
+BIO_SAVE_DIR = "scratch/wiki_food"
 LANG_CODE_MAPPING_HEADER = {
     "en": "en",
     "fr": "fr",
@@ -39,9 +38,9 @@ class BioFilenotFoundError(Exception):
 
 # Configure your Azure OpenAI client
 client = openai.AzureOpenAI(
-    api_key='5d830dce7597439091699136c45c675d',
+    api_key=os.getenv("THE_KEY"),
     api_version="2023-05-15",
-    azure_endpoint=URL_ENDPOINT
+    azure_endpoint=os.getenv("URL_ENDPOINT")
 )
 
 SRC_LANGUAGE_FILTER = 'en'  # The primary language to skip in final JSON if desired
@@ -503,7 +502,7 @@ def main():
     """
     # Example placeholders
     TARGET_LANGUAGES = ['ru', 'fr', 'zh']
-    json_directory = "/Users/anniewang/Desktop/infogap/scratch/ethics_annotation_save/wikigap_data"
+    json_directory = "scratch/ethics_annotation_save/wikigap_data"
     output_csv = "wikigap_data_temp.csv"
     target_names = {
         'fact',
@@ -516,7 +515,7 @@ def main():
         'language',
         'paragraph_index'
     }
-    from packages.wikigap_topics_scrape import selected_topics
+    from wikigap_topics_scrape import selected_topics
     for topic in selected_topics:
         today = '2025-03-24'
         sample_size = 20  # Example sample size
@@ -589,7 +588,7 @@ def main():
         nested_json = df_to_nested_json(df_merged)
 
         # Save final JSON
-        output_json = f"/Users/anniewang/Desktop/infogap/scratch/ethics_annotation_save/wikigap_data/json/{topic}.json"
+        output_json = f"scratch/ethics_annotation_save/wikigap_data/json/{topic}.json"
         with open(output_json, "w", encoding="utf-8") as f:
             json.dump(nested_json, f, indent=4, ensure_ascii=False)
         print(f"JSON file saved successfully: {output_json}")

@@ -2,6 +2,3 @@
 	path = flowmason
 	url = https://github.com/smfsamir/flowmason
 	branch = abstract
-[submodule "wikipedia-edit-scrape-tool"]
-	path = wikipedia-edit-scrape-tool
-	url = https://github.com/smfsamir/wikipedia-edit-scrape-tool

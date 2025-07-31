@@ -831,12 +831,8 @@ def assess_flan_on_annotations(language):
     ipdb.set_trace()
 
 
+# Code used for CSCW 2026 paper
 ###############################################################################
-# If you already have a function like 'execute_complete_gpt_general'
-# and want to adapt it to handle a single (en_bio_id, tgt_bio_id), you
-# can create a helper function like this:
-###############################################################################
-
 def run_complete_gpt_pipeline(en_bio_id, tgt_bio_id):
     """
     Runs the GPT pipeline for a single (en_bio_id, tgt_bio_id) pair.
@@ -912,32 +908,6 @@ def run_complete_gpt_pipeline(en_bio_id, tgt_bio_id):
     except Exception as e:
         # Return failure info
         return (en_bio_id, tgt_bio_id, False, str(e))
-###############################################################################
-# Next, define a Click command that loops over a list of (en_bio_id, tgt_bio_id)
-###############################################################################
-
-# @click.command()
-# def run_multiple_topics():
-#     """
-#     Example CLI command that iterates over multiple
-#     (en_bio_id, tgt_bio_id) tuples and runs the pipeline.
-#     """
-
-#     # Hard-coded list of tuples for demonstration;
-#     # Alternatively, you can load these from a file or command line arguments.
-#     topics = [("Oolong", "乌龙茶")]
-
-#     # We will write failures and successes to 'output.txt'
-#     # in append mode to get real-time writes.
-#     with open("output.txt", "a", encoding="utf-8") as f:
-#         for en_bio_id, tgt_bio_id in topics:
-#             try:
-#                 run_complete_gpt_pipeline(en_bio_id, tgt_bio_id, f)
-#             except Exception:
-#                 # We already logged the failure in run_complete_gpt_pipeline,
-#                 # but you could do additional handling here if needed.
-#                 continue
-
 
 import concurrent.futures
 def process_topic(en_bio_id, tgt_bio_id):
@@ -951,15 +921,26 @@ def process_topic(en_bio_id, tgt_bio_id):
 
 @click.command()
 def run_multiple_topics():
-    # topics = TOPICS
+    # commented out the following line, cuz it's for debugging
     # topics = [("Oolong", "Улун")]
     # #("Oolong", "乌龙茶")
     # #("Oolong", "Улун"),("Oolong", "Thé Oolong")
-    # from packages.scraped_titles_fr import en_tgt_title_pairs
-    from packages.scraped_titles_zh import en_tgt_title_pairs
+   
+    input_tgt_lang = input("Enter the target language code you would like to analyze for the scraped topics (zh, ru, fr): ")
+    # Note: the scraped titles for both en and tgt language are saved in the same file called scraped_titles_{lang}.py in packages folder.
+    if input_tgt_lang == "zh":
+        from packages.scraped_titles_zh import en_tgt_title_pairs
+    elif input_tgt_lang == "ru":
+        from packages.scraped_titles_ru import en_tgt_title_pairs
+    elif input_tgt_lang == "fr":
+        from packages.scraped_titles_fr import en_tgt_title_pairs
+    else:
+        raise ValueError("Invalid target language code")
+
     topics = en_tgt_title_pairs
 
     # Decide how many workers you want. E.g., 4 parallel processes:
+    # TODO: currently set to 1 works, but when increase workers, sometimes it will fail
     max_workers = 1
 
     # Open the output.txt once in append mode:
@@ -995,15 +976,15 @@ def main():
     pass
 
 # connotation_df_en_ru_gpt_2024_05_30.json
-main.add_command(execute_complete_gpt)
-main.add_command(execute_complete_gpt_en_zh)
-main.add_command(execute_complete_gpt_general)
-main.add_command(execute_complete_flan)
-main.add_command(execute_complete_gpt_en_ru)
-main.add_command(execute_complete_mt5_en_ru)
-main.add_command(execute_paragraph_align_ablation)
-main.add_command(execute_entailment_baseline)
-main.add_command(assess_flan_on_annotations)
+# main.add_command(execute_complete_gpt)
+# main.add_command(execute_complete_gpt_en_zh)
+# main.add_command(execute_complete_gpt_general)
+# main.add_command(execute_complete_flan)
+# main.add_command(execute_complete_gpt_en_ru)
+# main.add_command(execute_complete_mt5_en_ru)
+# main.add_command(execute_paragraph_align_ablation)
+# main.add_command(execute_entailment_baseline)
+# main.add_command(assess_flan_on_annotations)
 
 # For CSCW'26 WikiGap
 main.add_command(run_multiple_topics)

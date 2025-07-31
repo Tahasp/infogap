@@ -1,65 +1,154 @@
 # Contact
-Email: `fsamir@mail.ubc.ca`
+Email: `fsamir@mail.ubc.ca`, `zining.wang@ubc.ca`
 
-# Artifacts
+<!-- # Artifacts
 Our analysis dataframes from Section 3 of our paper are here, in JSON format (about ~600MB each):
 1. [En<->Fr](https://www.dropbox.com/scl/fi/oxdphmcxaai2ur7swoz1l/connotation_df_en_fr_flan.json?rlkey=pz82ygv8rx2xybkvv1eaavbo3&st=or1r65no&dl=0)
-2. [En<->Ru](https://www.dropbox.com/scl/fi/kavcip55wvbfegaafxy5b/connotation_df_en_ru_mt5.json?rlkey=q7wpn8n6ahwp6xg6vd3g9ogub&st=qw5vvi2z&dl=0)
+2. [En<->Ru](https://www.dropbox.com/scl/fi/kavcip55wvbfegaafxy5b/connotation_df_en_ru_mt5.json?rlkey=q7wpn8n6ahwp6xg6vd3g9ogub&st=qw5vvi2z&dl=0) -->
 
 You can process them with the `polars` package (`pl.read_json(...)`). `pandas` should also work. I recommend inspecting these dataframes before trying out the pipeline on your own documents.  
 
-# Running the pipeline yourself
-## I. Install flowmason
+# Running the pipeline yourself for generating Json output files for WikiGap extension
+<!-- ## I. Install flowmason
 1. Clone the repo: `git clone https://github.com/smfsamir/flowmason`
 2. Go into directory: `cd flowmason`
 3. Checkout the `abstract` branch: `git checkout abstract`
-4. Install the package locally `pip install -e .`
+4. Install the package locally `pip install -e .` -->
 
-## II. Install wikipedia-edit-scrape-tool
+<!-- ## II. Install wikipedia-edit-scrape-tool
 1. Clone the repo: `git clone https://github.com/smfsamir/wikipedia-edit-scrape-tool`
 2. Go into directory: `cd wikipedia-edit-scrape-tool`
-3. Install the package locally `pip install -e .`
+3. Install the package locally `pip install -e .` -->
 
-## III. Set up an Environment file
+## I. Set up an Environment file
 The purpose of the `.env` is to set configuration environment variables specific to you. Don't commit this. 
 1. In `infogap` project directory, run `touch .env`
 2. Create two keys: `SCRATCH_DIR` (where all the artifacts from the pipeline will be stored), and `THE_KEY`, an OpenAI key.
 
 
-
-## IV. Install requirements
+## II. Install requirements
 `pip install -r requirements.txt` (It's possible I missed a couple of modules here, please submit a PR if you find that to be the case and I'll approve right away). 
 
-## V. Scrape the articles you want.   
-With the `main_scrape_bios.py` module, you can scrape English articles and their French (`python main_scrape_bios.py scrape-french-bios`) and Russian (`python main_scrape_bios.py scrape-russian-bios`) counterparts. This will scrape all the bios from the LGBTBioCorpus (Park et al., 2021), and store them under `scratch/wiki_bios/`. It shouldn't be too difficult to replace it with the English wikipedia page IDs that you want. By page IDs, I'm referring to the string after `wiki` in `https://en.wikipedia.org/wiki/Gabriel_Attal` (in this case, it is Gabriel_Attal). For an example, I've uploaded Gabriel Attal's English and French biographies (`Gabriel_Attal_en.pkl` and `Gabriel_Attal_fr.pkl`) under `scratch/wiki_bios/`. We will use these as an example. 
+## III. Scrape the articles you want.   
+To scrape text from Wikipedia for a list of topics:
+1. Specify the Topics
+Open the file `wikigap_topics_scrape.py` and modify the list to include the Wikipedia article titles you want to scrape.
+• Each topic should match the exact title used on Wikipedia. You can refer to the examples already included for our CSCW 2026 paper.
+2. Run the Scraper
+From the project root directory, run the following command in your terminal: `python main_scrape_bios.py scrape-bios`
 
-## VI. Run the InfoGap pipeline. 
-We can run the En<->Fr InfoGap on using `python main_complete_analysis.py execute-complete-gpt`. When you go to the definition of this command, you'll see this code block:
+3. Choose Target Language
+After running the command, you will be prompted to enter the target language code (e.g., fr for French, zh for Chinese).
+• These codes should follow the ISO 639-1 language codes.
+• The scraper will fetch articles in the target language for each topic listed in wikigap_topics_scrape.py, using the English titles as a reference.
+4. Output Location
+The scraped results will be saved to the path specified by your SCRATCH_DIR variable in your .env file.
 
-``` 
-    full_map_dict['map_step_compute_info_gap'] = MapReduceStep(info_gap_map_dict, 
-        {
-            'en_bio_id': ["Gabriel_Attal"],
-            'fr_bio_id': ["Gabriel_Attal"], 
-            'person_name': ["Gabriel Attal"],
-            'tgt_person_name': ["Gabriel Attal"]
-        },{
-        'version': '001'
-        }, 
-        reduce_info_gaps, 
-        'fr_bio_id',
-        [BioFilenotFoundError, NoPronounError, ExceptionOOMSingleDataPoint, np.AxisError]
-    )
+## IV. Run the InfoGap Pipeline
+
+To run the InfoGap analysis between English and a target language, use the following command:
+
+`python main_complete_analysis.py run-multiple-topics`
+
+This script reads pairs of scraped article titles from language-specific files named:
+
+`scraped_titles_{lang}.py`
+
+These files are located in the packages/ folder.
+
+When prompted with:
+
+Enter the target language code you would like to analyze for the scraped topics (zh, ru, fr):
+
+the script retrieves the corresponding article pairs and iteratively analyzes them.
+
+### Pipeline Overview
+
+The core pipeline logic is defined in packages/steps/map_dicts.py in the function get_en_tgt_info_diff_map_dict. This function builds a sequence of SingletonSteps to:
+	•	Retrieve pre-scraped content blocks
+	•	Generate facts from each article
+	•	Align and union fact-paragraph associations
+	•	Identify cross-lingual fact matches
+	•	Apply GPT-based reasoning to detect information gaps
+
+### Example Steps
+
+Retrieve Target-Language Content Blocks
+
+```python
+map_reduce_dict['step_get_tgt_content_blocks'] = SingletonStep(
+    step_retrieve_prescraped_tgt_content_blocks,
+    {
+        'version': '003',
+        **tgt_bio_id_dict,
+        **tgt_lang_dict
+    }
+)
 ```
-Since we're only running it one bio, all of the lists only have one entry. (This looks a bit silly because the en and fr bio IDs are the same, as are the person name entries. They can however all be different, like when we're running it on En<->Ru, instead of En<->Fr). The InfoGap will be computed for all people in this list. Each person's InfoGap is cached under `${SCRATCH_DIR}/full_cache`, thanks to the [flowmason package](https://github.com/smfsamir/flowmason). 
 
-Below this step, you'll also see `map_step_compute_connotations`, which we use for the analyses in Section 3.3 and 3.4 of our [paper](https://arxiv.org/abs/2410.04282). Feel free to exclude this if you're not interested in a sentiment analysis. 
+Generate Facts with LLM for Target Language
 
-The line `metadata = conduct(os.path.join(SCRATCH_DIR, "full_cache"), full_map_dict, "full_analysis_logs")` executes these steps using the [flowmason](https://github.com/smfsamir/flowmason) package. The line below `info_gap_dfs = load_mr_artifact(metadata[0])` will load the artifact from the [flowmason](https://github.com/smfsamir/flowmason) cache. `info_gap_dfs` is a tuple with three elements (`len(info_gap_dfs)==3`). The first one is the InfoGap for the En->Fr direction, the second for the Fr->En direction. The third element is a historical artifact from earlier in the development, you can safely ignore it. The InfoGaps are stored as `polars` DataFrames. Let's consider `info_gap_dfs[0]` (`En->Fr`) The most important column is `gpt-4_intersection_label`, where `yes` means it is in both `En` and `Fr` while no means it is only in `En`. (Analogous for `info_gap_dfs[1]`, the `Fr->En` direction). 
+```python
+map_reduce_dict['step_generate_facts_tgt'] = SingletonStep(
+    step_generate_facts,
+    {
+        'version': '002',
+        'lang_code': tgt_lang,
+        'content_blocks': 'step_get_tgt_content_blocks',
+        **person_name_dict
+    }
+)
+```
 
+Collapse GPT Labels
 
+```python
+map_reduce_dict['step_collapse_gpt_labels'] = SingletonStep(
+    step_collapse_gpt_labels,
+    {
+        'version': '002',
+        'model_intersection_names': ('gpt-4o',),
+        'gpt_info_gap_dfs': 'step_reasoning_intersection_label'
+    }
+)
+```
 
-(NOTE: we only tested it on biographies. On events with complex histories, like border conflicts, it may not be as reliable. At any rate, you'll want to evaluate the results for a couple of samples. More on that below). 
+This final step produces a binary label for each fact indicating whether it exists in both language editions (yes) or only in one (no).
+
+### Pipeline Execution
+
+The entire pipeline is executed via the function run_complete_gpt_pipeline, which internally calls the map-reduce steps and runs:
+
+```python
+        metadata = conduct(
+            os.path.join(SCRATCH_DIR, f"full_cache_gpt_en_{tgt_lang}"),
+            full_map_dict,
+            f"en_{tgt_lang}_gpt_logs"
+        )
+```
+
+This uses the flowmason framework to coordinate step execution.
+
+You can then load the resulting artifacts with:
+
+```python
+info_gap_dfs = load_mr_artifact(metadata[0])
+```
+
+This returns a tuple of three polars DataFrames:
+* info_gap_dfs[0]: DataFrame of English → Target Language direction
+* info_gap_dfs[1]: DataFrame of Target Language → English direction
+* info_gap_dfs[2]: Legacy placeholder (can be ignored)
+
+Each DataFrame includes a gpt-4_intersection_label column where:
+* yes = fact is found in both language editions
+* no = fact is found only in the source language
+
+### Output Location
+
+The results are cached under:
+`${SCRATCH_DIR}/full_cache`
+via the flowmason package, enabling reproducibility and debugging.
 
 ## VII. Evaluating InfoGap on your documents
 If you're using this for the first time, you should definitely check that the InfoGap labels are reasonably aligned with your expectations. This is what the final two steps are for:

@@ -279,7 +279,6 @@ def get_en_tgt_info_diff_map_dict(en_bio_id=None, tgt_bio_id=None, person_name=N
         **tgt_bio_id_dict,
         **tgt_lang_dict
     })
-    ## Repeat, but for chinese
     map_reduce_dict['step_generate_facts'] = SingletonStep(step_generate_facts, { # in info diff steps
         'version': '003',
         'lang_code': 'en',
@@ -292,11 +291,6 @@ def get_en_tgt_info_diff_map_dict(en_bio_id=None, tgt_bio_id=None, person_name=N
         'content_blocks': 'step_get_tgt_content_blocks', 
         **person_name_dict
     })
-    # map_reduce_dict['step_infer_pronoun'] = SingletonStep(step_infer_pronoun, {
-    #     'version': '001',
-    #     'en_content_blocks': 'step_get_en_content_blocks' 
-    # })
-    #### 
     # Paragraph Alignment, correcting for Hubness between paragraphs
     map_reduce_dict['step_align_fact_paragraphs'] = SingletonStep(step_obtain_en_tgt_paragraphs_associations, {
         'version': '003',
@@ -321,8 +315,6 @@ def get_en_tgt_info_diff_map_dict(en_bio_id=None, tgt_bio_id=None, person_name=N
         **person_name_dict,
         'tgt_bio_id': tgt_bio_id
     })
-    ### 
-
     map_reduce_dict['step_reasoning_intersection_label'] = SingletonStep(step_compute_info_gap_reasoning, {
         'version': '006',
         'model_name': 'gpt-4o',

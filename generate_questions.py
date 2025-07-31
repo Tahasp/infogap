@@ -3,12 +3,10 @@ import glob
 import os
 import openai
  
-URL_ENDPOINT = "https://ubcnlpgpt4.openai.azure.com/"
-
 client = openai.AzureOpenAI(
-    api_key='5d830dce7597439091699136c45c675d',
+    api_key=os.getenv("THE_KEY"),
     api_version="2023-05-15",
-    azure_endpoint=URL_ENDPOINT
+    azure_endpoint=os.getenv("URL_ENDPOINT")
 )
 
 def extract_facts(filename, topic):
