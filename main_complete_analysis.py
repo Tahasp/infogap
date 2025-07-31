@@ -899,8 +899,8 @@ def run_complete_gpt_pipeline(en_bio_id, tgt_bio_id):
             f"en_{tgt_lang}_gpt_logs"
         )
 
-        # Load results
-        info_gap_dfs = load_mr_artifact(metadata[0])
+        # # Load results
+        # info_gap_dfs = load_mr_artifact(metadata[0])
 
         # If everything succeeded
         return (en_bio_id, tgt_bio_id, True, None)

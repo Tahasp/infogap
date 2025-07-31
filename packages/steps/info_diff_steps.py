@@ -321,7 +321,7 @@ def load_other_client():
         raise ValueError("Missing THE_KEY in .env file")
     
     # Set the Azure endpoint
-    URL_ENDPOINT = "https://ubcnlpgpt4.openai.azure.com/"
+    URL_ENDPOINT = os.getenv("URL_ENDPOINT")
     
     # Initialize the Azure OpenAI client
     client = openai.AzureOpenAI(

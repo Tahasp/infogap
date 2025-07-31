@@ -12,7 +12,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-URL_ENDPOINT = "https://ubcnlpgpt4.openai.azure.com/"
+URL_ENDPOINT = os.getenv("URL_ENDPOINT")
 INSTRUCTIONS = "Generate a single sentence to continue this narrative."  # Change to your task
 
 def main():

@@ -1,66 +1,30 @@
-# Contact
+# InfoGap: A Tool for Analyzing Cross-Lingual Information Disparities in Wikipedia
+
+
+### Contact
+
 Email: `fsamir@mail.ubc.ca`, `zining.wang@ubc.ca`
 
-<!-- # Artifacts
-Our analysis dataframes from Section 3 of our paper are here, in JSON format (about ~600MB each):
-1. [En<->Fr](https://www.dropbox.com/scl/fi/oxdphmcxaai2ur7swoz1l/connotation_df_en_fr_flan.json?rlkey=pz82ygv8rx2xybkvv1eaavbo3&st=or1r65no&dl=0)
-2. [En<->Ru](https://www.dropbox.com/scl/fi/kavcip55wvbfegaafxy5b/connotation_df_en_ru_mt5.json?rlkey=q7wpn8n6ahwp6xg6vd3g9ogub&st=qw5vvi2z&dl=0) -->
+### Running the Pipeline
 
-You can process them with the `polars` package (`pl.read_json(...)`). `pandas` should also work. I recommend inspecting these dataframes before trying out the pipeline on your own documents.  
+To run the InfoGap pipeline, follow these steps:
 
-# Running the pipeline yourself for generating Json output files for WikiGap extension
-<!-- ## I. Install flowmason
-1. Clone the repo: `git clone https://github.com/smfsamir/flowmason`
-2. Go into directory: `cd flowmason`
-3. Checkout the `abstract` branch: `git checkout abstract`
-4. Install the package locally `pip install -e .` -->
-
-<!-- ## II. Install wikipedia-edit-scrape-tool
-1. Clone the repo: `git clone https://github.com/smfsamir/wikipedia-edit-scrape-tool`
-2. Go into directory: `cd wikipedia-edit-scrape-tool`
-3. Install the package locally `pip install -e .` -->
-
-## I. Set up an Environment file
-The purpose of the `.env` is to set configuration environment variables specific to you. Don't commit this. 
-1. In `infogap` project directory, run `touch .env`
-2. Create two keys: `SCRATCH_DIR` (where all the artifacts from the pipeline will be stored), and `THE_KEY`, an OpenAI key.
-
-
-## II. Install requirements
-`pip install -r requirements.txt` (It's possible I missed a couple of modules here, please submit a PR if you find that to be the case and I'll approve right away). 
-
-## III. Scrape the articles you want.   
-To scrape text from Wikipedia for a list of topics:
-1. Specify the Topics
-Open the file `wikigap_topics_scrape.py` and modify the list to include the Wikipedia article titles you want to scrape.
-• Each topic should match the exact title used on Wikipedia. You can refer to the examples already included for our CSCW 2026 paper.
-2. Run the Scraper
-From the project root directory, run the following command in your terminal: `python main_scrape_bios.py scrape-bios`
-
-3. Choose Target Language
-After running the command, you will be prompted to enter the target language code (e.g., fr for French, zh for Chinese).
-• These codes should follow the ISO 639-1 language codes.
-• The scraper will fetch articles in the target language for each topic listed in wikigap_topics_scrape.py, using the English titles as a reference.
-4. Output Location
-The scraped results will be saved to the path specified by your SCRATCH_DIR variable in your .env file.
-
-## IV. Run the InfoGap Pipeline
-
-To run the InfoGap analysis between English and a target language, use the following command:
-
-`python main_complete_analysis.py run-multiple-topics`
-
-This script reads pairs of scraped article titles from language-specific files named:
-
-`scraped_titles_{lang}.py`
-
-These files are located in the packages/ folder.
-
-When prompted with:
-
-Enter the target language code you would like to analyze for the scraped topics (zh, ru, fr):
-
-the script retrieves the corresponding article pairs and iteratively analyzes them.
+1. **Set up an Environment file**:
+	* Create a `.env` file in the project root directory.
+	* Add two environment variables: `SCRATCH_DIR` and `THE_KEY`.
+	* `SCRATCH_DIR` should point to a directory where the pipeline will store its artifacts.
+	* `THE_KEY` should contain your OpenAI API key.
+2. **Install requirements**:
+	* Run `pip install -r requirements.txt`.
+3. **Scrape the articles you want**:
+	* Modify the `wikigap_topics_scrape.py` file to include the topics you want to scrape.
+	* Run `python main_scrape_bios.py scrape-bios`.
+	* The script will prompt you to enter the target language code.
+	* The scraped results will be saved to the path specified by `SCRATCH_DIR`.
+4. **Run the InfoGap pipeline**:
+	* Run `python main_complete_analysis.py run-multiple-topics`.
+	* The script will read pairs of scraped article titles from language-specific files named `scraped_titles_{lang}.py`.
+	* The script will then analyze the scraped articles and generate the output.
 
 ### Pipeline Overview
 
@@ -127,9 +91,7 @@ The entire pipeline is executed via the function run_complete_gpt_pipeline, whic
         )
 ```
 
-This uses the flowmason framework to coordinate step execution.
-
-You can then load the resulting artifacts with:
+This uses the flowmason framework to coordinate step execution. You can then load the resulting artifacts with:
 
 ```python
 info_gap_dfs = load_mr_artifact(metadata[0])
@@ -145,77 +107,116 @@ Each DataFrame includes a gpt-4_intersection_label column where:
 * no = fact is found only in the source language
 
 ### Output Location
+* Step 3 of function `run_complete_gpt_pipeline` will save both info_gap_dfs[0] and info_gap_dfs[1] to the `ethnic_annotation_save/wikigap_data` directory. Those are saved as a json file named `{topic}.json`. These json files are considered as annotations, and will be the input to the process annotation step.
 
-The results are cached under:
-`${SCRATCH_DIR}/full_cache`
-via the flowmason package, enabling reproducibility and debugging.
+> Note: For debugging purposes, each single step's output are cached under:`${SCRATCH_DIR}/full_cache`via the flowmason package.
 
-## VII. Evaluating InfoGap on your documents
-If you're using this for the first time, you should definitely check that the InfoGap labels are reasonably aligned with your expectations. This is what the final two steps are for:
+## VII. Process annotations and Format InfoGap Output for WikiGap
+> Since the WikiGap research relies on automatic knowledge alignment using LLMs, we didn't incorporate the mannual annotation step in the pipeline to generate the WikiGap datasets. This is different from the original InfoGap research where the accuracy and reliability of the automatic alignment was evaluated using manual annotations.
 
-### Preparing the annotation frame
+After running the InfoGap pipeline, the next step is to transform the output into a structured, translated, and filtered dataset ready for integration with the WikiGap Chrome extension. This is done using the script:
+
+```bash
+python process_annotations.py
 ```
-full_map_dict['step_prep_annotation_frame'] = SingletonStep(step_prep_annotation_frame, { # samples 10 facts from the InfoGap frame for each direction (20 in total)
-    'info_gap_dfs': 'map_step_compute_info_gap', 
-    'tgt_lang_code': 'fr', 
-    'intersection_label': 'gpt-4_intersection_label',
-    'version': '003'
-})
-full_map_dict['step_add_annotation_translations'] = SingletonStep(step_add_translations_to_annotation_frame, { # adds translations for {tgt_lang_code} using NLLB-200, in case you don't read {tgt_lang_code}
-    'annotation_frame': 'step_prep_annotation_frame', 
-    'target_fname': 'attal_annotation_frame.json',
-    'version': '001'
-})
+
+This script converts raw JSON outputs from the InfoGap pipeline into paragraph-aligned, cross-lingual knowledge discrepancy datasets, organized per article and per language, and saved as nested JSON for WikiGap extension use.
+
+### What process_annotations.py Does
+1. Loads and parses the InfoGap .json output files (one per article and language).
+2. Retrieves and processes corresponding paragraph blocks for English and target-language articles.
+3. Matches each fact to its paragraph and associated section headers (e.g., header_1, header_2).
+4. Filters for language-specific facts (i.e., intersection_label == 'no').
+5. Translates headers and facts to English using:
+    * Google Translate (headers)
+    * GPT-4o via Azure OpenAI (facts)
+6. Samples facts per header section (optional).
+7. Generates a nested JSON structure organized by person → language → section → facts, ready to be loaded by the WikiGap extension.
+
+### Input/Output File Structure
+
+Input JSONs:
+From the pipeline, located in:
+
+scratch/ethics_annotation_save/wikigap_data/annotation_{date}_{en_title}_{lang}.json
+
+
+Paragraph Blocks (pickled):
+From preprocessing step:
+
+scratch/wiki_food/{bio_id}_{lang}.pkl
+
+
+Output JSONs:
+Saved per topic to:
+
+scratch/ethics_annotation_save/wikigap_data/json/{topic}.json
+
+
+How to Run the Script
+
+Make sure the following are set up:
+1. The packages.scraped_titles_{lang}.py files exist and contain en_tgt_title_pairs
+2. The wikigap_topics_scrape.py file has a selected_topics list
+3. Environment variables for Azure OpenAI:
+
+```bash
+export THE_KEY=your-azure-api-key
+export URL_ENDPOINT=https://your-azure-endpoint.openai.azure.com/
 ```
-### Performing annotations
-This will result in a JSON file that will store annotations; in this case, it is `attal_annotation_frame.json`, since we're using Gabriel Attals `En` and `Fr` pages as the running example. Then, running `python main_perform_annotation.py` should result in the following output in your terminal: 
 
+Then run:
+
+```bash
+python process_annotations.py
 ```
-2025-01-27 15:29:30.559 | INFO     | packages.annotate:annotate_frame:72 - Number of samples that are unannotated: 20
-  0%|                                                                                            | 0/10 [00:00<?, ?it/s]
-
-Consider the following fact(s) about Gabriel Attal:
-
-1. The French media speculated that Attal was a potential contender in the 2027 presidential election.
-2. On 16 January 2024, Attal made an announcement.
-3. Attal announced that he would not be seeking a vote of confidence in the National Assembly.
 
 
-Is the final fact present in the French Wikipedia article about Gabriel Attal (fr.wikipedia.org/wiki/Gabriel_Attal)?
+### How to Interpret the Output
 
-Here are some snippets from the French article:
-1. Emmanuel Macron a annoncé la dissolution de l'Assemblée le soir des élections européennes. (Emmanuel Macron announced the dissolution of the Assembly on the eve of the European elections.)
-2. Gabriel Attal n'a pas été consulté avant l'annonce de la dissolution de l'Assemblée. (Gabriel Attal was not consulted before the dissolution of the Assembly was announced.)
-
-1. Le 8 juillet 2024, Gabriel Attal remet sa démission et celle de son gouvernement au président de la République. (On 8 July 2024, Gabriel Attal submitted his resignation and that of his government to the President of the Republic.)
-2. Le président de la République refuse la démission de Gabriel Attal. (The President of the Republic refuses the resignation of Gabriel Attal.)
-
-
-A: covered by the snippets
-B: partly covered by the snippets
-C: covered by the article
-D: partly covered by the article
-E: Not in the article
-Answer (A/B/C/D/E):
+Each final .json file is organized like:
+```json
+{
+  "topic_name": {
+    "languages": {
+      "fr": {
+        "headers": {
+          "Cultural Background": {
+            "entries": [
+              {
+                "fact": {
+                  "original": "Le plat est souvent servi lors des mariages.",
+                  "translated": "The dish is often served at weddings.",
+                  ...
+                },
+                "header_1": {
+                  "original": "Cultural Background",
+                  "translated": "Cultural Background"
+                },
+                ...
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
 ```
-How it works:
-- You read the source facts at the beginning. We provide up to two facts of previous context, but the fact of interest is the final one. In particular, whether that fact exists in the other language version.
-- Suppose it does exist in the other article:
-    - In this case, you will pick either A, B, C, D
-    - You pick A or B when the target fact is shown in the small set of snippets from the other language version
-    - Otherwise you pick C or D. To select C or D, you'll have to go through the other language version's article directly on Wikipedia and see if you can find the fact in there.
-- Otherwise, you pick E. 
 
+Only facts labeled with intersection_label == 'no' are included (i.e., knowledge present in one language but missing in the other).
 
-A few things to note:
-- You can see at the start of the annotation, the total number of samples in the annotation JSON that haven't been annotated (at the beginning this will be 20).
-- A progress bar that says 0/10. This may be confusing because there are 20 samples to be annotated. This is because I try to annotate 10 samples per sitting (each annotation is not easy since you may have to read the target article in full to see whether the fact is listed/inferrable or not. You can annotate more than 10 in one sitting by changing the `num_samples` parameter in the call to `annotate_frame` in `main_perform_annotation.py`.
-- When you finish all 10 (for the sitting), or Ctrl+C and exit, your annotations will be saved. Next time you run the annotation, the terminal output will show that you have `20-n` annotations to complete.
-- It's also instructive to read Section 2.3 of the [paper](https://arxiv.org/pdf/2410.04282) to understand the terminal content for each datapoint. 
+### Optional: Enable Sampling
+
+To sample a subset of facts per header (e.g., 15 per section), enable this line in main():
+
+```python
+df_tgt_sampled = weighted_sampling_by_header(df_filtered, header_column="header_1", sample_size=15)
+```
 
 
 
-# Citation
+### Citation
 ```
 @inproceedings{samir-2024-information,
     title = "Locating Information Gaps and Narrative Inconsistencies Across Languages: A Case Study of LGBT People Portrayals on Wikipedia",
