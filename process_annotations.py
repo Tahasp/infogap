@@ -40,7 +40,7 @@ class BioFilenotFoundError(Exception):
 client = openai.AzureOpenAI(
     api_key=os.getenv("THE_KEY"),
     api_version="2023-05-15",
-    azure_endpoint=URL_ENDPOINT
+    azure_endpoint=os.getenv("URL_ENDPOINT"),
 )
 
 SRC_LANGUAGE_FILTER = 'en'  # The primary language to skip in final JSON if desired
