@@ -1,5 +1,8 @@
-# InfoGap: A Tool for Analyzing Cross-Lingual Information Disparities in Wikipedia
+# Utilizing InfoGap pipeline and developing new output processing for WikiGap project (CSCW 2026)
 
+This repository contains the code for running the InfoGap pipeline for the WikiGap CSCW 2026 paper.
+
+> Link to the WikiGap repo: <https://github.com/aw814/WikiGap>. This branch is for generating the datasets used in the WikiGap web extension. The final output files should be uploaded to the json folder in the WikiGap repo.
 
 ### Contact
 
@@ -107,14 +110,14 @@ Each DataFrame includes a gpt-4_intersection_label column where:
 * no = fact is found only in the source language
 
 ### Output Location
-* Step 3 of function `run_complete_gpt_pipeline` will save both info_gap_dfs[0] and info_gap_dfs[1] to the `ethnic_annotation_save/wikigap_data` directory. Those are saved as a json file named `{topic}.json`. These json files are considered as annotations, and will be the input to the process annotation step.
+* Step 3 of function `run_complete_gpt_pipeline` will save both info_gap_dfs[0] and info_gap_dfs[1] to the `ethnic_annotation_save/wikigap_data` directory. Those are saved as a json file named using the format: `<generation_date><article_topic><targeted_lang>.json`. For example: `annotation_2024-03-24_Peking_Duck_fr.json`. These json files are considered as annotations, and will be the input to the process annotation step.
 
 > Note: For debugging purposes, each single step's output are cached under:`${SCRATCH_DIR}/full_cache`via the flowmason package.
 
-## VII. Process annotations and Format InfoGap Output for WikiGap
+## VII. Process annotations and Format InfoGap Output for WikiGap (NEW PROCESS DEVELOPED FOR WIKIGAP PROJECT)
 > Since the WikiGap research relies on automatic knowledge alignment using LLMs, we didn't incorporate the mannual annotation step in the pipeline to generate the WikiGap datasets. This is different from the original InfoGap research where the accuracy and reliability of the automatic alignment was evaluated using manual annotations.
 
-After running the InfoGap pipeline, the next step is to transform the output into a structured, translated, and filtered dataset ready for integration with the WikiGap Chrome extension. This is done using the script:
+After running the InfoGap pipeline, the next step is to transform the output into a structured, translated, and filtered dataset ready for integration with the WikiGap Chrome extension. **This is a novel step developed specifically for the WikiGap project.** This is done using the script:
 
 ```bash
 python process_annotations.py
@@ -174,7 +177,7 @@ python process_annotations.py
 
 ### How to Interpret the Output
 
-Each final .json file is organized like:
+Each {topic}.json file is organized like:
 ```json
 {
   "topic_name": {
@@ -214,7 +217,10 @@ To sample a subset of facts per header (e.g., 15 per section), enable this line 
 df_tgt_sampled = weighted_sampling_by_header(df_filtered, header_column="header_1", sample_size=15)
 ```
 
+### How to Use the Output!
 
+The output JSONs can be loaded into the WikiGap Chrome extension. see the json folder in 
+<https://github.com/aw814/WikiGap/tree/main/json>.
 
 ### Citation
 ```
@@ -233,5 +239,193 @@ df_tgt_sampled = weighted_sampling_by_header(df_filtered, header_column="header_
     year = "2024",
     address = "Miami",
     publisher = "Association for Computational Linguistics"
+}
+```
+
+# InfoGap ( WikiGap Branch )  
+*Generating Cross‑Lingual Fact‑Gap Datasets for the CSCW 2026 “WikiGap” Project*
+
+This branch adapts the original **InfoGap** pipeline to produce the datasets consumed by the [WikiGap Chrome extension](https://github.com/aw814/WikiGap).  
+All *UI* logic lives in the WikiGap repo; **this repo handles data generation and post‑processing only**.
+
+---
+
+## 📬 Contact
+
+`fsamir@mail.ubc.ca` · `zining.wang@ubc.ca`
+
+---
+
+## ⚡ Quick Start
+
+> **Prerequisites:** Python ≥ 3.9 and an OpenAI (or Azure OpenAI) API key.
+
+### 1. Create a `.env` file
+
+| Variable      | Purpose                                                  |
+|---------------|----------------------------------------------------------|
+| `SCRATCH_DIR` | Where all pipeline artifacts & caches will be saved      |
+| `THE_KEY`     | Your OpenAI / Azure OpenAI API key                       |
+
+### 2. Install dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Scrape Wikipedia topics
+1. Edit **`wikigap_topics_scrape.py`** to list the article *titles* you wish to scrape.  
+2. Run:
+   ```bash
+   python main_scrape_bios.py scrape-bios
+   ```
+3. When prompted, enter the **target language code** (e.g., `fr`, `zh`, `ru`).  
+   Scraped HTML blocks are cached under `${SCRATCH_DIR}`.
+
+### 4. Run the InfoGap pipeline
+```bash
+python main_complete_analysis.py run-multiple-topics
+```
+* The script reads article‑pairs from `packages/scraped_titles_{lang}.py`.  
+* Outputs are written to `ethnic_annotation_save/wikigap_data/` (see **Output Files** below).
+
+---
+
+## 🔬 Pipeline Overview
+
+The function `packages/steps/map_dicts.py::get_en_tgt_info_diff_map_dict` assembles a sequence of **SingletonStep** objects that:
+
+1. Retrieve pre‑scraped content blocks  
+2. Generate facts via GPT for each article  
+3. Align paragraph ↔ fact associations  
+4. Detect cross‑lingual fact matches  
+5. Label information gaps (`yes` / `no`) using GPT reasoning  
+
+Example excerpt (simplified):
+
+```python
+# 1. Retrieve target‑language content
+map_reduce_dict['step_get_tgt_content_blocks'] = SingletonStep(
+    step_retrieve_prescraped_tgt_content_blocks,
+    {'version': '003', **tgt_bio_id_dict, **tgt_lang_dict}
+)
+
+# 2. Generate facts for the target language
+map_reduce_dict['step_generate_facts_tgt'] = SingletonStep(
+    step_generate_facts,
+    {
+        'version': '002',
+        'lang_code': tgt_lang,
+        'content_blocks': 'step_get_tgt_content_blocks',
+        **person_name_dict
+    }
+)
+
+# 3. Collapse intersection labels
+map_reduce_dict['step_collapse_gpt_labels'] = SingletonStep(
+    step_collapse_gpt_labels,
+    {
+        'version': '002',
+        'model_intersection_names': ('gpt-4o',),
+        'gpt_info_gap_dfs': 'step_reasoning_intersection_label'
+    }
+)
+```
+
+Internally, `run_complete_gpt_pipeline()` orchestrates the flow:
+
+```python
+metadata = conduct(
+    os.path.join(SCRATCH_DIR, f"full_cache_gpt_en_{tgt_lang}"),
+    full_map_dict,
+    f"en_{tgt_lang}_gpt_logs"
+)
+```
+
+The helper `load_mr_artifact(metadata[0])` then returns a tuple of three **Polars** DataFrames:
+
+| Index | Direction                         | Note                  |
+|-------|-----------------------------------|-----------------------|
+| 0     | English → Target Language         |                       |
+| 1     | Target Language → English         |                       |
+| 2     | Legacy placeholder                | Not used for WikiGap  |
+
+Each frame carries a `gpt-4_intersection_label` (`yes` / `no`).
+
+---
+
+## 📁 Output Files
+
+During Step 3 of `run_complete_gpt_pipeline`, both direction‑specific DataFrames are saved to  
+`ethnic_annotation_save/wikigap_data/` as **annotation JSONs**:
+
+```
+annotation_<DATE>_<ARTICLE_TOPIC>_<LANG>.json
+# e.g. annotation_2024-03-24_Peking_Duck_fr.json
+```
+
+These files are the *inputs* to the post‑processing stage described next.
+
+> For debugging, every intermediate step is cached under `${SCRATCH_DIR}/full_cache/` (via Flowmason).
+
+---
+
+## 🆕 Post‑Processing for WikiGap (`process_annotations.py`)
+
+Because WikiGap relies solely on **automatic** knowledge alignment, we introduce a *new* step that converts the raw annotation JSONs into a single, uniform `{topic}.json` per article.
+
+Run:
+```bash
+python process_annotations.py
+```
+
+### What the script does
+
+1. **Load** each `annotation_*.json`.  
+2. **Attach** paragraph blocks & section headers.  
+3. **Filter** for language‑specific gaps (`intersection_label == "no"`).  
+4. **Translate** headers (Google) and facts (GPT‑4o) into English.  
+5. **Optionally sample** facts per section.  
+6. **Emit** a nested structure ready for the WikiGap extension.
+
+Resulting files are stored in:
+
+```
+scratch/ethics_annotation_save/wikigap_data/json/{topic}.json
+```
+
+#### Environment variables (Azure OpenAI)
+```bash
+export THE_KEY=<your-azure-api-key>
+export URL_ENDPOINT=https://<your-endpoint>.openai.azure.com/
+```
+
+---
+
+## ➡️ Using the Output with the WikiGap Extension
+
+Copy each `{topic}.json` into the WikiGap repo at:
+
+```
+WikiGap/
+└─ data_pipeline/
+   └─ wikigap_data/
+      └─ json/
+         └─ {topic}.json
+```
+
+Reload the extension in Chrome—cross‑lingual facts will now appear for the corresponding article.
+
+---
+
+## ✏️ Citation
+
+```bibtex
+@inproceedings{samir-2024-information,
+  title     = "Locating Information Gaps and Narrative Inconsistencies Across Languages: A Case Study of LGBT People Portrayals on Wikipedia",
+  author    = "Samir, Farhan and Park, Chan Young and Field, Anjalie and Shwartz, Vered and Tsvetkov, Yulia",
+  booktitle = "Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing",
+  year      = "2024",
+  address   = "Miami",
+  publisher = "Association for Computational Linguistics"
 }
 ```
