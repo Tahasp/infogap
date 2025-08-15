@@ -1,6 +1,6 @@
 import ipdb
 from typing import List, Union
-from wikipedia_edit_scrape_tool import Paragraph, Header
+# from wikipedia_edit_scrape_tool import Paragraph, Header
 from sklearn.metrics.pairwise import cosine_similarity
 import polars as pl
 from typing import List
@@ -13,21 +13,21 @@ from nltk import sent_tokenize
 import numpy as np
 
 
-def forced_align_fact_to_paragraph(fact_df: pl.DataFrame, paragraph: Paragraph, 
-                                   hubness_measure: np.array,
-                                   model: SentenceTransformer):
-    # return a list of indices of length {fact_df} that map to indices in paragraph_df. 
-    fact_sents = fact_df["fact"].to_list()
-    fact_embeds = model.encode(fact_sents)
-    paragraph_sents = sent_tokenize(paragraph.clean_text)
-    assert hubness_measure.shape[0] == len(paragraph_sents)
-    full_sent_embeds = model.encode(paragraph_sents)
-    # NOTE: if we go back to forced alignfrment, need to ensure that the facts have not been shuffled
-    sim_matrix = cosine_similarity(full_sent_embeds, fact_embeds) # shape: (len(paragraph_sents), len(fact_sents))
-    sim_matrix = sim_matrix - hubness_measure[:, None] # adjust the similarity matrix by subtracting the hubness measure, accounting for sentences that are very hubby (similar to many facts/sentences)
-    assert sim_matrix.shape[0] == len(paragraph_sents) and sim_matrix.shape[1] == len(fact_sents)
-    alignment_inds = sim_matrix.argmax(axis=0) # shape: (len(fact_sents))
-    return [paragraph_sents[alignment_ind] for alignment_ind in alignment_inds]
+# def forced_align_fact_to_paragraph(fact_df: pl.DataFrame, paragraph: Paragraph, 
+#                                    hubness_measure: np.array,
+#                                    model: SentenceTransformer):
+#     # return a list of indices of length {fact_df} that map to indices in paragraph_df. 
+#     fact_sents = fact_df["fact"].to_list()
+#     fact_embeds = model.encode(fact_sents)
+#     paragraph_sents = sent_tokenize(paragraph.clean_text)
+#     assert hubness_measure.shape[0] == len(paragraph_sents)
+#     full_sent_embeds = model.encode(paragraph_sents)
+#     # NOTE: if we go back to forced alignfrment, need to ensure that the facts have not been shuffled
+#     sim_matrix = cosine_similarity(full_sent_embeds, fact_embeds) # shape: (len(paragraph_sents), len(fact_sents))
+#     sim_matrix = sim_matrix - hubness_measure[:, None] # adjust the similarity matrix by subtracting the hubness measure, accounting for sentences that are very hubby (similar to many facts/sentences)
+#     assert sim_matrix.shape[0] == len(paragraph_sents) and sim_matrix.shape[1] == len(fact_sents)
+#     alignment_inds = sim_matrix.argmax(axis=0) # shape: (len(fact_sents))
+#     return [paragraph_sents[alignment_ind] for alignment_ind in alignment_inds]
 
 def forced_align(facts: List[str], sentences: str, 
                  hubness_measure: np.array,
@@ -81,7 +81,7 @@ def forced_align(facts: List[str], sentences: str,
     assert len(reconstructed) == len(facts), ipdb.set_trace()
     return reconstructed
 
-def compute_hubness(paragraph: Paragraph, other_fact_blocks: pl.DataFrame, num_hubness_compute, model):
+def compute_hubness(paragraph, other_fact_blocks: pl.DataFrame, num_hubness_compute, model):
     sents = sent_tokenize(paragraph)
     other_facts = other_fact_blocks['fact'].to_list()
     if other_facts== []: # if there is only one paragraph?
@@ -97,8 +97,8 @@ def compute_hubness(paragraph: Paragraph, other_fact_blocks: pl.DataFrame, num_h
     avg_cosine_sim = cosine_sim_unnormalized / num_hubness_compute # compute the hubness measure
     return avg_cosine_sim
 
-def step_forced_align_facts_to_paragraph(en_fr_info_gaps, en_content_blocks: List[Union[Paragraph, Header]], 
-                                        fr_content_blocks: List[Union[Paragraph, Header]], 
+def step_forced_align_facts_to_paragraph(en_fr_info_gaps, en_content_blocks, 
+                                        fr_content_blocks, 
                                         pronoun: str, **kwargs):
     # set en_paragraphs to all the elements of type Paragraph in en_content_blocks
     en_paragraphs = [block for block in en_content_blocks if isinstance(block, Paragraph)]
@@ -132,8 +132,8 @@ def step_forced_align_facts_to_paragraph(en_fr_info_gaps, en_content_blocks: Lis
     return en_info_gaps.to_pandas(), fr_info_gaps.to_pandas(), alignment_dfs       
     # eventually, we will want to return the alignment information into the information gap dataframe.
 
-def step_forced_align_en_tgt_facts_to_paragraph(en_tgt_info_gaps, en_content_blocks: List[Union[Paragraph, Header]], 
-                                        tgt_content_blocks: List[Union[Paragraph, Header]], 
+def step_forced_align_en_tgt_facts_to_paragraph(en_tgt_info_gaps, en_content_blocks, 
+                                        tgt_content_blocks, 
                                         pronoun: str, **kwargs):
     # set en_paragraphs to all the elements of type Paragraph in en_content_blocks
     en_paragraphs = [block["paragraph"] for block in en_content_blocks if "paragraph" in block]

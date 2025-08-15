@@ -1,5 +1,5 @@
 from dotenv import dotenv_values
-TGT_LANG = 'zh'
+TGT_LANG = 'ru'
 
 # Centralized language mappings
 LANG_MAPPINGS = {
@@ -50,7 +50,7 @@ BIO_SAVE_DIR = f"{SCRATCH_DIR}/wiki_food"
 
 HF_CACHE_DIR = f"{SCRATCH_DIR}/hf_cache"
 ANNOTATION_SAVE_PATH = f"{SCRATCH_DIR}/ethics_annotation_save"
-GPT_CACHE_LOCATION = f"{SCRATCH_DIR}/ethics-lgbt-gpt-cache"
+GPT_CACHE_LOCATION = f"{SCRATCH_DIR}/gpt-cache"
 CONNOTATION_FLAN_SAVE_DIR  = f"{SCRATCH_DIR}/connotation_flan_t5"
 FACT_DECOMP_FLAN_SAVE_DIR  = f"{SCRATCH_DIR}/fact_decomp_flan_t5"
 EVENT_SAVE_DIR = f"{SCRATCH_DIR}/wiki_events"

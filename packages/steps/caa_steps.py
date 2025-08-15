@@ -13,7 +13,7 @@ from functools import partial
 from dotenv import dotenv_values
 import loguru
 
-from wikipedia_edit_scrape_tool import Paragraph, Header
+# from wikipedia_edit_scrape_tool import Paragraph, Header
 
 from packages.gpt_query import ask_gpt_about_caa_classification, ask_gpt_about_caa_classification_coreference_resolution, prompt_gpt_4, prep_caa_prompt
 from packages.flan_query import ask_flan_about_connotation, ask_mt5_about_connotation
@@ -364,7 +364,7 @@ def _parse_response_rationale(lang_code, prompt_content, response_raw):
 class NoPronounError(Exception):
     pass
 
-def step_infer_pronoun(en_content_blocks: List[Union[Paragraph,Header]], **kwargs) -> str:
+def step_infer_pronoun(en_content_blocks, **kwargs) -> str:
     paragraphs = [block for block in en_content_blocks if isinstance(block, Paragraph)]
     # count the number of times each pronoun appears in the text: he/his/him vs. she/her/hers vs. they/them/theirs
     # return the pronoun (he/she/they) according to the most common pronoun triplet

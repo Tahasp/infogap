@@ -16,7 +16,6 @@ from tqdm import tqdm
 from typing import List, Union, Optional, Tuple, Dict
 import loguru
 from nltk import sent_tokenize
-from wikipedia_edit_scrape_tool import get_text, Header, Paragraph 
 from functools import partial
 from collections import defaultdict
 from sentence_transformers import SentenceTransformer
@@ -35,37 +34,6 @@ logger = loguru.logger
 config = dotenv_values(".env")
 today = datetime.date.today()
 logger.add(f"logs/info_diff_{today}.log", rotation="500 MB")
-
-def _retrieve_relevant_paragraphs(content_blocks, wiki_lang: str, 
-                                  apply_content_filter: bool) -> List[Paragraph]:
-    if wiki_lang == 'enwiki':
-        target_words = LGBT_EN_WORDS
-    elif wiki_lang == 'frwiki':
-        target_words = LGBT_FR_WORDS
-    else:
-        raise ValueError(f"wiki_lang must be one of {TARGET_LANGUAGES}")
-    relevant = []
-    for block in content_blocks:
-        if isinstance(block, Paragraph):
-            if apply_content_filter and any([word in block.clean_text for word in target_words]):
-                relevant.append(block)
-            elif not apply_content_filter:
-                relevant.append(block)
-    return relevant
-
-def step_retrieve_en_content_blocks(en_bio_id: str, 
-                                 **kwargs) -> List[Union[Header, Paragraph]]:
-    """Return all of the headers and paragraphs from the English Wikipedia page 
-    for the person with the given bio id.
-    """
-    english_id = en_bio_id
-    en_link = f"https://en.wikipedia.org/wiki/{english_id}"
-    content_blocks = get_text(en_link, 'enwiki')
-    # filter out paragraphs where the clean_text attribute string has fewer than 6 words.
-    content_blocks = list(filter(lambda x: not (isinstance(x, Paragraph) and len(x.clean_text.split()) < 6), content_blocks))
-    # logger.info(f"Retrieved {len(content_blocks)} paragraphs from {en_link}")
-
-    return content_blocks 
 
 class BioFilenotFoundError(Exception):
     pass
@@ -147,100 +115,6 @@ def remove_person_specific_blocks_fr(fr_bio_id, content_blocks):
 
 
 
-
-def step_retrieve_fr_content_blocks(fr_bio_id: str, 
-                                 **kwargs) -> List[Union[Header, Paragraph]]:
-    french_id = fr_bio_id
-    fr_link = f"https://fr.wikipedia.org/wiki/{french_id}"
-    content_blocks = get_text(fr_link, 'frwiki')
-    logger.info(f"Retrieved {len(content_blocks)} paragraphs from {fr_link}")
-    num_blocks_orig = len(content_blocks)
-    # voir_aussi_header = next(filter(lambda x: isinstance(x, Header) and x.text == "Voir aussi" , content_blocks))
-    # check if content blocks has voir aussi header
-    # if any([isinstance(block, Header) and block.text == "Voir aussi" for block in content_blocks]):
-    #     voir_aussi_header = next(filter(lambda x: isinstance(x, Header) and x.text == "Voir aussi" , content_blocks))
-    #     voir_aussi_index = content_blocks.index(voir_aussi_header)
-    #     content_blocks = content_blocks[:voir_aussi_index]
-    #     # log that we're omitting the "Voir aussi" section and everything after it
-    #     logger.info(f"Omitting the 'Voir aussi' section and everything after it for the French Wikipedia page for {fr_bio_id}. This drops {num_blocks_orig - len(content_blocks)} blocks")
-    logger.info(f"Total content blocks before filtering: {len(content_blocks)}")
-    try:
-        logger.info("Checking for 'Voir aussi' section in content_blocks...")
-        if any([isinstance(block, Header) and block.text == "Voir aussi" for block in content_blocks]):
-            logger.info("'Voir aussi' section found. Attempting to locate and process it.")
-            # Attempt to find the 'Voir aussi' header
-            voir_aussi_header = next(
-                filter(lambda x: isinstance(x, Header) and x.text == "Voir aussi", content_blocks)
-            )
-            # Attempt to find the index of the header
-            voir_aussi_index = content_blocks.index(voir_aussi_header)
-            logger.info(f"'Voir aussi' section found at index {voir_aussi_index}.")
-            
-            # Filter out content blocks after the 'Voir aussi' section
-            content_blocks = content_blocks[:voir_aussi_index]
-            logger.info(f"'Voir aussi' section removed. Blocks remaining: {len(content_blocks)}")
-        else:
-            logger.info("'Voir aussi' section not found. No blocks removed.")
-    except StopIteration as e:
-        logger.error("Error: 'Voir aussi' header not found but was expected. Check content_blocks.", exc_info=True)
-    except ValueError as e:
-        logger.error("Error: Unable to find index for 'Voir aussi' header. Possible mismatch in content_blocks.", exc_info=True)
-    except Exception as e:
-        logger.error(f"Unexpected error while processing 'Voir aussi' section: {e}", exc_info=True)
-    content_blocks = remove_person_specific_blocks_fr(fr_bio_id, content_blocks)
-    logger.info(f"BBBBlocks remaining after person-specific filtering: {len(content_blocks)}")
-    content_blocks = list(filter(lambda x: not (isinstance(x, Paragraph) and len(x.clean_text.split()) < 6), content_blocks)) # filter out paragraphs where the clean_text attribute string has fewer than 6 words.
-    return content_blocks
-
-
-
-def step_retrieve_zh_content_blocks(zh_bio_id: str, 
-                                 **kwargs) -> List[Union[Header, Paragraph]]:
-    chinese_id = zh_bio_id
-    zh_link = f"https://zh.wikipedia.org/wiki/{chinese_id}"
-    content_blocks = get_text(zh_link, 'zhwiki')
-    logger.info(f"Retrieved {len(content_blocks)} paragraphs from {zh_link}")
-    num_blocks_orig = len(content_blocks)
-   
-    logger.info(f"Total content blocks before filtering: {len(content_blocks)}")
-    try:
-        logger.info("Checking for '参见' section in content_blocks...")
-        for block in content_blocks:
-            logger.info(f"Block type: {type(block)}, Attributes: {dir(block)}")
-        if any([isinstance(block, Header) and block.clean_text == "参见" for block in content_blocks]):
-            logger.info("'参见' section found. Attempting to locate and process it.")
-            # Attempt to find the '参见' header
-            voir_aussi_header = next(
-                filter(lambda x: isinstance(x, Header) and x.clean_text == "参见", content_blocks)
-            )
-            # Attempt to find the index of the header
-            voir_aussi_index = content_blocks.index(voir_aussi_header)
-            logger.info(f"'参见' section found at index {voir_aussi_index}.")
-            
-            # Filter out content blocks after the '参见' section
-            content_blocks = content_blocks[:voir_aussi_index]
-            logger.info(f"'参见' section removed. Blocks remaining: {len(content_blocks)}")
-        else:
-            logger.info("'参见' section not found. No blocks removed.")
-    except StopIteration as e:
-        logger.error("Error: '参见' header not found but was expected. Check content_blocks.", exc_info=True)
-    except ValueError as e:
-        logger.error("Error: Unable to find index for '参见' header. Possible mismatch in content_blocks.", exc_info=True)
-    except Exception as e:
-        logger.error(f"Unexpected error while processing '参见' section: {e}", exc_info=True)
-    # content_blocks = remove_person_specific_blocks_zh(zh_bio_id, content_blocks)
-    # logger.info(f"BBBBlocks remaining after person-specific filtering: {len(content_blocks)}")
-    content_blocks = list(filter(lambda x: not (isinstance(x, Paragraph) and len(x.clean_text) < 6), content_blocks)) # filter out paragraphs where the clean_text attribute string has fewer than 6 words.
-    return content_blocks
-
-
-def step_retrieve_ru_content_blocks(ru_bio_id: str, 
-                                    **kwargs): 
-    ru_bio_id = ru_bio_id
-    ru_link = f"https://ru.wikipedia.org/wiki/{ru_bio_id}"
-    content_blocks = get_text(ru_link, 'ruwiki')
-    return content_blocks
-
 def check_gpt_fact_intersection_cache(model_name, person_name, lang_code) -> Dict[str, str]:
     cache_dir = GPT_CACHE_LOCATION
     if model_name == 'gpt-4':
@@ -320,15 +194,8 @@ def load_other_client():
     if not api_key:
         raise ValueError("Missing THE_KEY in .env file")
     
-    # Set the Azure endpoint
-    URL_ENDPOINT = os.getenv("URL_ENDPOINT")
-    
     # Initialize the Azure OpenAI client
-    client = openai.AzureOpenAI(
-        api_key=api_key,
-        api_version="2023-05-15",
-        azure_endpoint=URL_ENDPOINT
-    )
+    client = OpenAI(api_key=api_key)
     return client
 
 def extract_fact_decomp_list(response: str) -> List[str]:
@@ -529,41 +396,6 @@ def step_get_tgt_retrieval_candidates(all_en_fact_blocks: List[FactParagraph],
         ])
         result_dfs.append(fr_src_facts_frame)
     return pl.concat(result_dfs)
-
-def step_generate_facts_flan(content_blocks: List[Union[Paragraph, Header]],
-                             lang_code: str, 
-                             person_name: str,
-                             **kwargs) -> List[List[str]]:
-    all_facts = []
-    paragraphs = [block for block in content_blocks if isinstance(block, Paragraph)]
-    if lang_code == 'en' or lang_code == 'fr':
-        output_dir = f"{FACT_DECOMP_FLAN_SAVE_DIR}_twp=False/checkpoint-600" # twp: train with peft
-        ask_for_facts = generate_facts_flan(output_dir, lang_code)
-    elif lang_code == 'ru':
-        ask_for_facts = generate_facts_mt5(MT5_FACT_DECOMP_MODEL_PATH, lang_code)
-    else:
-        raise ValueError(f"lang_code must be one of ['en', 'fr', 'ru']")
-
-    progress = tqdm(total=len(paragraphs))
-    # TODO: iterate two paragraphs at a time
-    for i in range(0, len(paragraphs), 2):
-        try:
-            batch_paragraphs = paragraphs[i:i+2]
-            responses = ask_for_facts([paragraph.clean_text for paragraph in batch_paragraphs])
-            responses = [sent_tokenize(response) for response in responses]
-            all_facts.extend([FactParagraph(response) for response in responses])
-            progress.update(len(batch_paragraphs))
-        except OutOfMemoryError:
-            for paragraph in batch_paragraphs:
-                response = ask_for_facts([paragraph.clean_text])
-                response = sent_tokenize(response)
-                all_facts.append(FactParagraph(response))
-            progress.update(len(batch_paragraphs))
-    # for paragraph in tqdm(paragraphs): # TODO: can we create two paragraphs at a time?  response = ask_for_facts(paragraph.clean_text)
-    #     # response = response.split("\n") # apparently the finetuning can't generate new lines
-    #     response = sent_tokenize(response)
-    #     all_facts.append(FactParagraph(response))
-    return all_facts
 
 def _create_fact_df(facts: List[List[str]]) -> pl.DataFrame:
     fact_paragraph_nums = []

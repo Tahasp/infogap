@@ -17,11 +17,11 @@ import torch
 from datetime import datetime
 
 from packages.steps.info_diff_steps import BioFilenotFoundError, ExceptionOOMSingleDataPoint
-from packages.steps.map_dicts import get_en_fr_info_diff_map_dict, get_en_fr_info_diff_map_dict_flan , get_caa_map_dict_fr, get_en_ru_gpt_info_diff_map_dict, get_caa_map_dict_gpt,\
-    get_en_ru_info_diff_map_dict_flan, get_caa_map_dict_flan_ru, get_en_fr_ablation_dict,\
+from packages.steps.map_dicts import get_en_fr_info_diff_map_dict , get_caa_map_dict_fr, get_en_ru_gpt_info_diff_map_dict, get_caa_map_dict_gpt,\
+    get_en_fr_ablation_dict,\
     get_caa_map_dict_fr_gpt, get_en_zh_info_diff_map_dict, get_en_tgt_info_diff_map_dict
 from packages.steps.reductions import reduce_info_gaps, reduce_caa_classifications, reduce_paragraph_ablation
-from packages.steps.caa_steps import step_prep_for_caa, step_caa_multi_sentence, step_caa_multi_sentence_flan, InfoGapEmptyError, NoPronounError
+from packages.steps.caa_steps import step_prep_for_caa, step_caa_multi_sentence, InfoGapEmptyError, NoPronounError
 from packages.annotate import annotate_frame, load_save_if_nexists
 from packages.flan_query import ask_flan_about_fact_intersection, ask_mt5_about_fact_intersection
 # from packages.constants import ANNOTATION_SAVE_PATH, NUM_CONTEXT_SRC, NUM_CONTEXT_TGT, NUM_RETRIEVALS
@@ -926,7 +926,7 @@ def run_multiple_topics():
     # #("Oolong", "乌龙茶")
     # #("Oolong", "Улун"),("Oolong", "Thé Oolong")
    
-    input_tgt_lang = input("Enter the target language code you would like to analyze for the scraped topics (zh, ru, fr): ")
+    input_tgt_lang = TGT_LANG
     # Note: the scraped titles for both en and tgt language are saved in the same file called scraped_titles_{lang}.py in packages folder.
     if input_tgt_lang == "zh":
         from packages.scraped_titles_zh import en_tgt_title_pairs

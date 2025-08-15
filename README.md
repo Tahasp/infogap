@@ -51,6 +51,7 @@ python main_complete_analysis.py run-multiple-topics
 
 * The script reads pairs of scraped article titles from `scraped_titles_{lang}.py`.  
 * It then analyzes the scraped articles and generates the output.
+* **Very important:** please set the `TGT_LANG` variable in `constants.py` to the target language you want to analyze. `TGT_LANG` is used to retrieve the target language content blocks. 
 
 ---
 
@@ -191,8 +192,7 @@ python process_annotations.py
 3. Set environment variables for Azure OpenAI:
 
 ```bash
-export THE_KEY=your-azure-api-key
-export URL_ENDPOINT=https://your-azure-endpoint.openai.azure.com/
+export THE_KEY=your-api-key
 ```
 
 Then run:
