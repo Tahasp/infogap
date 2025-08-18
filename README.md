@@ -5,7 +5,7 @@ Paper: https://aclanthology.org/2024.emnlp-main.384/
 Email: `fsamir@mail.ubc.ca`
 
 # Update (2025-08-18)
-My advisee @aw814 has a cleaner (and easier to set up!) implementation on the `WikiGap` branch. I recommend using that one, though this one should work as well. 
+My advisee [@aw814](https://github.com/aw814) has a cleaner (and easier to set up!) implementation on the `WikiGap` branch. I recommend using that one, though this one should work as well. 
 
 # Artifacts
 Our analysis dataframes from Section 3 of our paper are here, in JSON format (about ~600MB each):
