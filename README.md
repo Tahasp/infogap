@@ -30,6 +30,10 @@ Create a `.env` file in the project root directory and add **two** environment v
 ### 2. Install requirements
 
 ```bash
+source .venv/bin/activate    # (Linux/macOS)
+# OR
+.venv\Scripts\activate       # (Windows)
+
 pip install -r requirements.txt
 ```
 
