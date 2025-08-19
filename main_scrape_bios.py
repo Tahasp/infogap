@@ -222,12 +222,6 @@ def scrape_bios():
 def main():
     pass
 
-# main.add_command(scrape_french_bios_lgbtbiocorpus) # for replicating EMNLP'24
-# main.add_command(scrape_russian_bios_lgbtbiocorpus) # for replicating EMNLP'24
-# main.add_command(scrape_people_categories) # covariates for regression analysis in EMNLP'24
-# main.add_command(scrape_ablation_bios)
-# main.add_command(scrape_en_fr_bios)
-# main.add_command(scrape_en_zh_bios) 
 
 # for CSCW'26 WikiGap
 main.add_command(scrape_bios)
