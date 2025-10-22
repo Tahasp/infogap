@@ -153,3 +153,9 @@ A few things to note:
     publisher = "Association for Computational Linguistics"
 }
 ```
+
+# Interesting papers that use InfoGap
+1. [Disparities in Multilingual LLM-Based Healthcare Q&A](https://arxiv.org/pdf/2510.17476)
+2. [Epistemic Diversity and Knowledge Collapse in Large Language Models](https://www.arxiv.org/abs/2510.04226)
+3. [WikiGap: Promoting Epistemic Equity by Surfacing Knowledge Gaps Between English Wikipedia and other Language Editions](https://arxiv.org/pdf/2505.24195) (Disclaimer: I'm a coauthor on this one)
+
