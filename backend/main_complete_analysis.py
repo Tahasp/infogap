@@ -3,8 +3,9 @@ import numpy as np
 import ipdb
 import datetime
 import polars as pl
+import pandas as pd
 from collections import OrderedDict
-from flowmason.flowmason import conduct, SingletonStep, load_artifact_with_step_name, MapReduceStep, load_mr_artifact
+from flowmason import conduct, SingletonStep, MapReduceStep, load_artifact
 import click
 import os
 import urllib.parse
@@ -37,6 +38,17 @@ except ImportError:
         pass
 
 logger = loguru.logger
+
+print('1')
+def load_mr_artifact(step_entry):
+    """Load the final reduced artifact from a MapReduce step metadata entry.
+
+    step_entry is a tuple like (step_name, [ ... per-map metadata ..., final_reduce_metadata ])
+    """
+    step_name, meta_list = step_entry
+    final_meta = meta_list[-1]
+    return load_artifact((step_name, final_meta))
+print('2')
 def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, **kwargs) -> pl.DataFrame:
     en_info_gap_df = pl.from_pandas(info_gap_dfs[0])
     tgt_info_gap_df = pl.from_pandas(info_gap_dfs[1])
@@ -90,7 +102,7 @@ def step_prep_annotation_frame(info_gap_dfs, tgt_lang_code, intersection_label, 
     tgt_annotation_frame = get_annotation_frame(tgt_info_gap_df, en_info_gap_df).with_columns([pl.lit(tgt_lang_code).alias('language')])
     return pl.concat([en_annotation_frame, tgt_annotation_frame]).sample(fraction=1.0, with_replacement=False, shuffle=True)
 
-
+print('3')
 def step_prep_annotation_frame_all_facts(info_gap_dfs, tgt_lang_code, intersection_label, **kwargs) -> pl.DataFrame:
     en_info_gap_df = pl.from_pandas(info_gap_dfs[0])
     tgt_info_gap_df = pl.from_pandas(info_gap_dfs[1])
@@ -151,6 +163,7 @@ def step_prep_annotation_frame_all_facts(info_gap_dfs, tgt_lang_code, intersecti
 
     return pl.concat([en_annotation_frame, tgt_annotation_frame]).sample(fraction=1.0, with_replacement=False, shuffle=True)
 
+print('4')
 def  step_annotate_complete_tgt(annotation_frame: pl.DataFrame, 
                                **kwargs):
     # get today's date in form MM-DD
@@ -177,6 +190,7 @@ def  step_annotate_complete_tgt(annotation_frame: pl.DataFrame,
     # # # annotated_frame.write_json(f"{ANNOTATION_SAVE_PATH}/annotation_20f_{today}_{kwargs['topic']}.json")
     return
 
+print('5')
 @click.command()
 def execute_complete_gpt():
     full_map_dict = OrderedDict()
@@ -245,7 +259,7 @@ def execute_complete_gpt():
     info_gap_dfs = load_mr_artifact(metadata[0])
     connotation_dfs = load_mr_artifact(metadata[-1])
 
-
+print('6')
 @click.command()
 def execute_complete_gpt_en_zh():
     full_map_dict = OrderedDict()
@@ -312,7 +326,7 @@ def execute_complete_gpt_en_zh():
     ipdb.set_trace()
 
 
-
+print('7')
 @click.command()
 def execute_complete_gpt_general():
     full_map_dict = OrderedDict()
@@ -380,7 +394,7 @@ def _parse_response(response_raw):
     return response_label
 
 
-
+print('8')
 @click.command()
 @click.option('--start_index', default=0, help='The index to start at')
 @click.option('--end_index', default=0, help='The index to start at')
@@ -438,6 +452,7 @@ def execute_complete_flan(start_index: int, end_index: int):
     # print(neg_frame_en.with_columns(pl.col(ig_label).count().over('person_name').alias('num_facts_total')).group_by('person_name', ig_label).agg(pl.count('fact'), pl.first('num_facts_total'))\
     #     .select(pl.col('person_name'), pl.col(ig_label), (pl.col('fact') / pl.col('num_facts_total')).alias('percent'), pl.col('fact'), pl.col('num_facts_total')).sort('person_name').to_pandas().to_markdown())
 
+print('9')
 @click.command()
 @click.option('--start_index', default=0, help='The index to start at')
 @click.option('--end_index', default=0, help='The index to start at')
@@ -486,6 +501,7 @@ def execute_complete_mt5_en_ru(start_index: int, end_index: int):
     )
     metadata = conduct(os.path.join(SCRATCH_DIR, "full_cache_mt5_en_ru"), full_map_dict, "en_ru_mt5_logs")
 
+print('10')
 @click.command()
 def execute_complete_gpt_en_ru():
     info_gap_map_dict = get_en_ru_gpt_info_diff_map_dict()
@@ -541,6 +557,7 @@ def execute_complete_gpt_en_ru():
     annotation_frame = load_artifact_with_step_name(metadata, "prep_annotation_frame")
     ipdb.set_trace()
 
+print('11')
 @click.command()
 def execute_paragraph_align_ablation():
 
@@ -612,6 +629,7 @@ def execute_paragraph_align_ablation():
 
     ipdb.set_trace()
 
+print('12')
 @click.command()
 @click.argument('language')
 def execute_entailment_baseline(language):
@@ -737,6 +755,7 @@ def execute_entailment_baseline(language):
     # print(classification_report(fr_annotation_frame['fact_in_tgt_samir'], fr_annotation_frame['dummy_predictions']))
     # print(classification_report(annotation_frame['fact_in_tgt_samir'], annotation_frame['dummy_predictions']))
     
+print('13')
 @click.command()
 def assess_flan_on_annotations(language):
     assert language == 'fr' or language == 'ru'
@@ -831,8 +850,41 @@ def assess_flan_on_annotations(language):
     ipdb.set_trace()
 
 
+print('14')
 # Code used for CSCW 2026 paper
 ###############################################################################
+def save_info_gap_csv(info_gap_dfs, topic, tgt_lang):
+    """Persist combined info-gap DataFrames to CSV for easier inspection."""
+    csv_dir = os.path.join(SCRATCH_DIR, "ethics_annotation_save", "wikigap_data", "csv")
+    os.makedirs(csv_dir, exist_ok=True)
+
+    combined_frames = []
+    directions = [f"en_to_{tgt_lang}", f"{tgt_lang}_to_en"]
+    for df, direction in zip(info_gap_dfs[:2], directions):
+        if df is None:
+            continue
+        if hasattr(df, "to_pandas"):
+            frame = df.to_pandas()
+        elif isinstance(df, pd.DataFrame):
+            frame = df
+        else:
+            frame = pd.DataFrame(df)
+        frame = frame.copy()
+        frame["direction"] = direction
+        combined_frames.append(frame)
+
+    if not combined_frames:
+        logger.warning(f"No info gap data available to export for topic '{topic}'.")
+        return None
+
+    combined_df = pd.concat(combined_frames, ignore_index=True)
+    safe_topic = topic.replace(" ", "_")
+    csv_path = os.path.join(csv_dir, f"info_gap_{safe_topic}_{tgt_lang}.csv")
+    combined_df.to_csv(csv_path, index=False)
+    logger.info(f"Saved info gap CSV to {csv_path}")
+    return csv_path
+
+
 def run_complete_gpt_pipeline(en_bio_id, tgt_bio_id):
     """
     Runs the GPT pipeline for a single (en_bio_id, tgt_bio_id) pair.
@@ -899,16 +951,22 @@ def run_complete_gpt_pipeline(en_bio_id, tgt_bio_id):
             f"en_{tgt_lang}_gpt_logs"
         )
 
-        # # Load results
-        # info_gap_dfs = load_mr_artifact(metadata[0])
+        # Load results
+        info_gap_dfs = load_mr_artifact(metadata[0])
+        print(info_gap_dfs[0])
+        print(info_gap_dfs[1])
+        save_info_gap_csv(info_gap_dfs, en_bio_id, tgt_lang)
 
         # If everything succeeded
         return (en_bio_id, tgt_bio_id, True, None)
 
     except Exception as e:
+        print("Exception happened")
+        print(e)
         # Return failure info
         return (en_bio_id, tgt_bio_id, False, str(e))
 
+print('15')
 import concurrent.futures
 def process_topic(en_bio_id, tgt_bio_id):
     try:
@@ -919,6 +977,7 @@ def process_topic(en_bio_id, tgt_bio_id):
     except Exception as e:
         return (en_bio_id, tgt_bio_id, False, str(e))
 
+print('16')
 @click.command()
 def run_multiple_topics():
     # commented out the following line, cuz it's for debugging

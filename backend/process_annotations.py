@@ -9,16 +9,30 @@ import ast
 import requests
 from datetime import datetime
 from deep_translator import GoogleTranslator
-import openai
+from openai import OpenAI
 import loguru
 from tqdm import tqdm
+from dotenv import load_dotenv
+import re
 
 logger = loguru.logger
+
+BASE_DIR = os.path.dirname(__file__)
+
+load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env"))
+
+client = OpenAI(api_key=os.getenv("THE_KEY"))
+
+SCRATCH_ENV = os.getenv("SCRATCH_DIR", "./scratch")
+if os.path.isabs(SCRATCH_ENV):
+    SCRATCH_DIR = SCRATCH_ENV
+else:
+    SCRATCH_DIR = os.path.normpath(os.path.join(BASE_DIR, SCRATCH_ENV))
 
 # ---------------------------
 # 1) GLOBALS & CONFIG
 # ---------------------------
-BIO_SAVE_DIR = "scratch/wiki_food"
+BIO_SAVE_DIR = os.path.join(SCRATCH_DIR, "wiki_food")
 LANG_CODE_MAPPING_HEADER = {
     "en": "en",
     "fr": "fr",
@@ -35,13 +49,6 @@ LANG_CODE_MAPPING = {
 class BioFilenotFoundError(Exception):
     """Custom exception for missing bio file."""
     pass
-
-# Configure your Azure OpenAI client
-client = openai.AzureOpenAI(
-    api_key=os.getenv("THE_KEY"),
-    api_version="2023-05-15",
-    azure_endpoint=os.getenv("URL_ENDPOINT"),
-)
 
 SRC_LANGUAGE_FILTER = 'en'  # The primary language to skip in final JSON if desired
 
@@ -149,8 +156,13 @@ def retrieve_title(topic, tgt_lang):
     and return the target title that matches `topic`.
     """
     module_name = f"packages.scraped_titles_{tgt_lang}"
-    mod = importlib.import_module(module_name)  # import packages.scraped_titles_ru, for example
-    en_tgt_title_pairs = mod.en_tgt_title_pairs
+    try:
+        mod = importlib.import_module(module_name)
+    except ModuleNotFoundError:
+        logger.warning(f"Could not locate module {module_name} for target language '{tgt_lang}'.")
+        return None
+
+    en_tgt_title_pairs = getattr(mod, "en_tgt_title_pairs", [])
 
     for src_topic, tgt_topic_val in en_tgt_title_pairs:
         if src_topic == topic:
@@ -364,8 +376,24 @@ def get_wikidata_id(article_title, lang='en'):
         f"action=wbgetentities&sites={lang}wiki&titles={article_title}"
         f"&props=info&format=json"
     )
-    resp = requests.get(url)
-    data = resp.json()
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        logger.warning(f"Wikidata request failed for '{article_title}' ({lang}): {exc}")
+        return None
+
+    body = resp.text.strip()
+    if not body:
+        logger.warning(f"Wikidata returned empty response for '{article_title}' ({lang}).")
+        return None
+
+    try:
+        data = resp.json()
+    except ValueError:
+        logger.warning(f"Wikidata returned non-JSON response for '{article_title}' ({lang}).")
+        return None
+
     entities = data.get("entities", {})
     if entities:
         return list(entities.keys())[0]  # e.g. "Q12345"
@@ -376,8 +404,24 @@ def get_interlanguage_links(wikidata_id):
         f"https://www.wikidata.org/w/api.php?"
         f"action=wbgetentities&ids={wikidata_id}&props=sitelinks/urls&format=json"
     )
-    resp = requests.get(url)
-    data = resp.json()
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        logger.warning(f"Wikidata interlanguage request failed for '{wikidata_id}': {exc}")
+        return {}
+
+    body = resp.text.strip()
+    if not body:
+        logger.warning(f"Wikidata interlanguage response empty for '{wikidata_id}'.")
+        return {}
+
+    try:
+        data = resp.json()
+    except ValueError:
+        logger.warning(f"Wikidata interlanguage response not JSON for '{wikidata_id}'.")
+        return {}
+
     sitelinks = data.get("entities", {}).get(wikidata_id, {}).get("sitelinks", {})
     return {site: info['url'] for site, info in sitelinks.items()}
 
@@ -426,7 +470,9 @@ def df_to_nested_json(df):
     # (Use dict comprehension if you want to do it once per person!)
     languages_dict = {}
     for lang in non_src_langs:
-        languages_dict[lang] = get_tgt_wiki_link(person, SRC_LANGUAGE_FILTER, lang)
+        tgt_link = get_tgt_wiki_link(person, SRC_LANGUAGE_FILTER, lang)
+        if tgt_link:
+            languages_dict[lang] = tgt_link
 
     for _, row in df.iterrows():
         # Possibly skip rows with language == SRC_LANGUAGE_FILTER
@@ -500,10 +546,11 @@ def main():
       3) Translate, filter, sample.
       4) Collect all rows, convert to nested JSON, write out.
     """
-    # Example placeholders
-    TARGET_LANGUAGES = ['ru', 'fr', 'zh']
-    json_directory = "scratch/ethics_annotation_save/wikigap_data"
-    output_csv = "wikigap_data_temp.csv"
+    json_directory = os.path.join(SCRATCH_DIR, "ethics_annotation_save", "wikigap_data")
+    output_csv = os.path.join(json_directory, "wikigap_data_temp.csv")
+    output_json_dir = os.path.join(json_directory, "json")
+    os.makedirs(json_directory, exist_ok=True)
+    os.makedirs(output_json_dir, exist_ok=True)
     target_names = {
         'fact',
         'fact_aligned_sentence',
@@ -515,22 +562,37 @@ def main():
         'language',
         'paragraph_index'
     }
+    annotation_pattern = re.compile(r"annotation_(\d{4}-\d{2}-\d{2})_(.+)_(\w+)\.json$")
     from wikigap_topics_scrape import selected_topics
     for topic in selected_topics:
-        today = '2025-03-24'
-        sample_size = 20  # Example sample size
+        topic_annotations = {}
+        for filename in os.listdir(json_directory):
+            match = annotation_pattern.match(filename)
+            if match and match.group(2) == topic:
+                topic_annotations[match.group(3)] = filename
+
+        if not topic_annotations:
+            logger.warning(f"No annotation files found for topic '{topic}', skipping.")
+            continue
+
         all_dfs = []
-        for tgt_lang in TARGET_LANGUAGES:
+        for tgt_lang, file_name in topic_annotations.items():
             tgt_title = retrieve_title(topic, tgt_lang)
-            en_title = topic
-            file_name = f"annotation_{today}_{en_title}_{tgt_lang}.json"
+            if not tgt_title:
+                logger.warning(f"No target title found for topic '{topic}' and language '{tgt_lang}', skipping.")
+                continue
+
+            if tgt_lang not in LANG_CODE_MAPPING or tgt_lang not in LANG_CODE_MAPPING_HEADER:
+                logger.warning(f"No language mapping configured for '{tgt_lang}', skipping.")
+                continue
+
             df = process_single_json_file(json_directory, file_name, target_names, output_csv)
             if df.empty:
                 logger.warning(f"No data extracted from {file_name}, skipping.")
                 continue
 
             try:
-                en_blocks = step_retrieve_prescraped_en_content_blocks(en_title)
+                en_blocks = step_retrieve_prescraped_en_content_blocks(topic)
                 tgt_blocks = step_retrieve_prescraped_tgt_content_blocks(tgt_title, tgt_lang)
             except BioFilenotFoundError as e:
                 logger.warning(e)
@@ -588,7 +650,7 @@ def main():
         nested_json = df_to_nested_json(df_merged)
 
         # Save final JSON
-        output_json = f"scratch/ethics_annotation_save/wikigap_data/json/{topic}.json"
+        output_json = os.path.join(output_json_dir, f"{topic}.json")
         with open(output_json, "w", encoding="utf-8") as f:
             json.dump(nested_json, f, indent=4, ensure_ascii=False)
         print(f"JSON file saved successfully: {output_json}")

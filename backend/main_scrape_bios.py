@@ -1,7 +1,6 @@
 import click
 import os
 import re
-import requests
 import tqdm
 import dill
 from wikidata.client import Client
@@ -18,7 +17,7 @@ import loguru
 import unicodedata
 import urllib.parse
 
-from flowmason.flowmason import conduct, load_artifact, load_artifact_with_step_name, SingletonStep
+from flowmason import conduct, load_artifact, SingletonStep
 
 import loguru
 from packages.constants import BIO_SAVE_DIR, SCRATCH_DIR
@@ -31,24 +30,52 @@ logger = loguru.logger
 def get_wikidata_id(topic, lang, **kwargs):
     """Fetches the Wikidata Item ID for a given Wikipedia article title."""
     url = f"https://www.wikidata.org/w/api.php?action=wbgetentities&sites={lang}wiki&titles={topic}&props=info&format=json"
-    response = requests.get(url)
-    data = response.json()
-    entities = data.get("entities", {})
-    if entities:
-        return list(entities.keys())[0]  # Return the first Wikidata ID found
-    else: 
-        logger.error(f"Could not find Wikidata ID for the given topic {topic}")
+    headers = {'User-Agent': 'WikiGap-Research/1.0 (https://github.com/your-repo)'}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        
+        if not response.text.strip():
+            logger.error(f"Empty response from Wikidata API for topic: {topic}")
+            return None
+            
+        data = response.json()
+        entities = data.get("entities", {})
+        if entities:
+            return list(entities.keys())[0]  # Return the first Wikidata ID found
+        else: 
+            logger.error(f"Could not find Wikidata ID for the given topic {topic}")
+            return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request failed for topic {topic}: {e}")
+        return None
+    except ValueError as e:
+        logger.error(f"JSON decode error for topic {topic}: {e}")
         return None
 
 def get_interlanguage_links(wikidata_id, **kwargs):
     """Fetches interlanguage Wikipedia links for a given Wikidata Item ID."""
     url = f"https://www.wikidata.org/w/api.php?action=wbgetentities&ids={wikidata_id}&props=sitelinks/urls&format=json"
-    response = requests.get(url)
-    data = response.json()
-    sitelinks = data.get("entities", {}).get(wikidata_id, {}).get("sitelinks", {})
-    # logger.info(f"Extracted sitelinks: {sitelinks}")
-    language_links = {site: details['url'] for site, details in sitelinks.items()}
-    return language_links
+    headers = {'User-Agent': 'WikiGap-Research/1.0 (https://github.com/your-repo)'}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        if not response.text.strip():
+            logger.error(f"Empty response from Wikidata API for ID: {wikidata_id}")
+            return {}
+            
+        data = response.json()
+        sitelinks = data.get("entities", {}).get(wikidata_id, {}).get("sitelinks", {})
+        # logger.info(f"Extracted sitelinks: {sitelinks}")
+        language_links = {site: details['url'] for site, details in sitelinks.items()}
+        return language_links
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request failed for Wikidata ID {wikidata_id}: {e}")
+        return {}
+    except ValueError as e:
+        logger.error(f"JSON decode error for Wikidata ID {wikidata_id}: {e}")
+        return {}
 
 def extract_article_title_from_urls(urls, lang, **kwargs):
     lang_wiki = f"{lang}wiki"
@@ -66,16 +93,29 @@ def extract_article_title_from_urls(urls, lang, **kwargs):
 def get_wikipedia_text(article_title, lang, **kwargs):
     """Fetches all text content from a Wikipedia article."""
     url = f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext&format=json&titles={article_title}"
-    response = requests.get(url)
-    data = response.json()
-    
-    pages = data.get("query", {}).get("pages", {})
-    for page_id, page_data in pages.items():
-        if "extract" in page_data:
-            return page_data["extract"]
-        else:
-            logger.error(f"Could not find extract for title: {article_title}")
+    headers = {'User-Agent': 'WikiGap-Research/1.0 (https://github.com/your-repo)'}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        if not response.text.strip():
+            logger.error(f"Empty response from Wikipedia API for title: {article_title}")
             return None
+            
+        data = response.json()
+        pages = data.get("query", {}).get("pages", {})
+        for page_id, page_data in pages.items():
+            if "extract" in page_data:
+                return page_data["extract"]
+            else:
+                logger.error(f"Could not find extract for title: {article_title}")
+                return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request failed for Wikipedia title {article_title}: {e}")
+        return None
+    except ValueError as e:
+        logger.error(f"JSON decode error for Wikipedia title {article_title}: {e}")
+        return None
 
 def make_lang_article_dict(en_article_title, en_lang, tgt_article_title, tgt_lang, **kwargs):
     # ipdb.set_trace()

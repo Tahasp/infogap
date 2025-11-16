@@ -171,13 +171,17 @@ cython_debug/
 .pypirc
 
 .env
-
-
+.DS_Store
 connotation_df_en_fr_flan.json
 
 # package files
 logs/*
 outputs/*
 scratch/*
-
+backend/logs/
+backend/outputs/
+backend/scratch/
+backend/.DS_Store
+backend/packages/.DS_Store
+frontend/node_modules/
 

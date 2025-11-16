@@ -120,8 +120,10 @@ def annotate_frame(frame: pl.DataFrame, num_samples,
         # return result_frame 
 
 def load_save_if_nexists(df: pl.DataFrame, path: str):
-        # save the en_intersection_contexts and fr_intersection_contexts as a string by joining with a newline
-        # if (not os.path.exists(path)):
+        # ensure target directory exists before writing
+        dirpath = os.path.dirname(path)
+        if dirpath and not os.path.exists(dirpath):
+            os.makedirs(dirpath, exist_ok=True)
         df.write_json(path)
         # else:
         #     # df = pl.read_csv(path)
