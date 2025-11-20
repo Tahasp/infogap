@@ -56,7 +56,6 @@ Create `backend/.env` with at least:
 ```env
 SCRATCH_DIR=./scratch
 THE_KEY=<your OpenAI key>
-URL_ENDPOINT=<optional Azure endpoint or leave blank when using public API>
 ```
 
 Never commit this file.
@@ -64,15 +63,6 @@ Never commit this file.
 ---
 
 ## 6. Running the stack
-
-### Scraper & pipeline (CLI)
-
-```bash
-cd backend
-source ../.venv/bin/activate
-python main_scrape_bios.py scrape-bios
-python main_complete_analysis.py run-multiple-topics
-```
 
 ### API server
 
@@ -87,6 +77,37 @@ python server.py
 ```bash
 cd frontend
 npm run dev
+```
+
+### Scraper & pipeline (CLI Manual)
+
+```bash
+cd backend
+source ../.venv/bin/activate
+python main_scrape_bios.py scrape-bios
+python main_complete_analysis.py run-multiple-topics
+```
+
+- First Run may take a while due to model installations. View by pressing View Logs on the Web UI.
+- If Flowmason install fails then do:
+
+#### Flowmason
+
+```bash
+cd /Users/home/Downloads/test/infogap
+
+# clone flowmason into a folder named 'flowmason' (if you already have it, see below)
+git clone https://github.com/smfsamir/flowmason.git flowmason
+
+cd flowmason
+git fetch origin
+git checkout abstract
+git pull origin abstract
+
+# activate your venv then do an editable install
+cd /Users/home/Downloads/test/infogap
+. .venv/bin/activate
+python -m pip install -e ./flowmason
 ```
 
 ---

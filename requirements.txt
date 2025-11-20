@@ -117,8 +117,9 @@ urllib3==1.24.1
 uvicorn[standard]==0.32.0
 w3lib==2.2.1
 wcwidth==0.2.13
-websockets==8.1
+websockets>=10.4,<11
 widgetsnbextension==4.0.13
 Wikidata==0.8.1
 wikipedia==1.4.0
 zipp==3.21.0
+git+https://github.com/smfsamir/flowmason.git@abstract#egg=flowmason
