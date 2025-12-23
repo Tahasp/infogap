@@ -1,3 +1,4 @@
+import os
 import openai
 from dotenv import dotenv_values
 import loguru
@@ -9,7 +10,9 @@ from dataclasses import dataclass
 from packages.constants import LANG_MAPPINGS, ASK_GPT_FACT_EXTRACTION_PROMPTS, ASK_GPT_FACT_INTERSECTION_PROMPTS
 
 config = dotenv_values(".env")
-key = config["THE_KEY"] 
+key = os.getenv("THE_KEY") or config.get("THE_KEY")
+if not key:
+    raise ValueError("Missing THE_KEY in environment or .env file")
 logger = loguru.logger
 
 @dataclass
@@ -28,7 +31,9 @@ class FactParagraph:
 
 def load_tsvetshop_client():
     config = dotenv_values(".env")
-    key = config['TSVETSHOP_KEY']
+    key = os.getenv("TSVETSHOP_KEY") or config.get("TSVETSHOP_KEY")
+    if not key:
+        raise ValueError("Missing TSVETSHOP_KEY in environment or .env file")
     client = openai.AzureOpenAI(
         azure_endpoint="https://tsvetshop.openai.azure.com/",
         api_key=key,
@@ -301,4 +306,3 @@ def prompt_gpt_4(client, valid_labels: List[str], prompt) -> Tuple[str, int]:
         logger.warning(f"Invalid response from GPT-4: [[{response_content}]] for prompt:\n\n {prompt}")
     response_total_tokens = response.usage.total_tokens
     return response_content, response_total_tokens
-

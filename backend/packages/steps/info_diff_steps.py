@@ -186,17 +186,13 @@ def write_gpt_fact_cache(person_name, lang_code, fact_cache):
 #     return client
 
 def load_other_client():
-    # Load configuration from .env
-    config = dotenv_values(".env")
-    
-    # Get the API key from the .env file
-    api_key = config.get('THE_KEY')
+    # Load key from environment first, then fall back to .env file.
+    env_config = dotenv_values(".env")
+    api_key = os.getenv("THE_KEY") or env_config.get("THE_KEY")
     if not api_key:
-        raise ValueError("Missing THE_KEY in .env file")
-    
-    # Initialize the Azure OpenAI client
-    client = OpenAI(api_key=api_key)
-    return client
+        raise ValueError("Missing THE_KEY in environment or .env file")
+
+    return OpenAI(api_key=api_key)
 
 def extract_fact_decomp_list(response: str) -> List[str]:
     if '```' in response:

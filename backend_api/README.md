@@ -29,3 +29,8 @@ Server runs on `http://localhost:8000`
 4. Start this API server: `cd backend_api && python server.py`
 5. Start frontend: `cd frontend && npm run dev`
 6. Use the web UI to trigger jobs locally
+
+### Deploy notes
+
+- Deploying to Render/other hosts: set `ALLOWED_ORIGINS` (comma-separated) to your frontend origin(s) so CORS succeeds, e.g. `https://your-frontend.vercel.app`.
+- Point the frontend at the hosted API with `VITE_API_URL` (e.g. `https://infogap.onrender.com`).

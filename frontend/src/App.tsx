@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// Default to the hosted Render backend; override with VITE_API_URL for other environments.
+const API_BASE = import.meta.env.VITE_API_URL || 'https://infogap.onrender.com'
 
 export default function App() {
   const [topicInput, setTopicInput] = useState('')
@@ -13,6 +14,7 @@ export default function App() {
   const [logPath, setLogPath] = useState<string | null>(null)
   const [logText, setLogText] = useState<string | null>(null)
   const [showTopicTooltip, setShowTopicTooltip] = useState(false)
+  const [apiKey, setApiKey] = useState('')
 
   function addTopic() {
     const t = topicInput.trim()
@@ -32,10 +34,12 @@ export default function App() {
     }
     setStatus('submitting')
     try {
+      const payload: { topics: string[]; tgt_lang: string; the_key?: string } = { topics, tgt_lang: lang }
+      if (apiKey.trim()) payload.the_key = apiKey.trim()
       const res = await fetch(`${API_BASE}/jobs/scrape`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topics, tgt_lang: lang })
+        body: JSON.stringify(payload)
       })
       const data = await res.json()
       setJobId(data.id || 'dev-placeholder')
@@ -54,10 +58,12 @@ export default function App() {
     }
     setStatus('submitting')
     try {
+      const payload: { topic: string; tgt_lang: string; the_key?: string } = { topic: topics[0], tgt_lang: lang }
+      if (apiKey.trim()) payload.the_key = apiKey.trim()
       const res = await fetch(`${API_BASE}/jobs/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: topics[0], tgt_lang: lang })
+        body: JSON.stringify(payload)
       })
       const data = await res.json()
       setJobId(data.id || 'dev-placeholder')
@@ -282,6 +288,22 @@ export default function App() {
                 <option value="zh">Chinese (zh)</option>
               </select>
             </label>
+
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 14, background: '#f8fafc' }}>
+              <label style={{ display: 'block', fontWeight: 600 }}>
+                Use your OpenAI API key
+              </label>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="sk-..."
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid #dbe2ea', borderRadius: 8, marginTop: 8, background: '#fff' }}
+              />
+              <div style={{ ...page.muted, fontSize: 12, marginTop: 6, lineHeight: 1.4 }}>
+                Key is sent only with this request to the backend, not saved in local storage or logs. Leave blank to rely on server configuration.
+              </div>
+            </div>
 
             <div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

@@ -19,10 +19,13 @@ from dotenv import load_dotenv
 
 app = FastAPI()
 
-# Allow CORS for local frontend
+# Allow CORS for configured frontend origins (comma-separated), defaulting to local dev.
+default_origins = ["http://localhost:5173", "http://localhost:3000"]
+extra_origins = os.environ.get("ALLOWED_ORIGINS", "")
+allowed_origins = default_origins + [o.strip() for o in extra_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,10 +95,12 @@ def update_tgt_lang_constant(tgt_lang: str) -> None:
 class RunRequest(BaseModel):
     topic: str
     tgt_lang: str
+    the_key: str | None = None  # user-supplied OpenAI key
 
 class ScrapeRequest(BaseModel):
     topics: list[str]
     tgt_lang: str
+    the_key: str | None = None  # optional for scrape; carried for symmetry
 
 class UpdateLangRequest(BaseModel):
     tgt_lang: str
@@ -131,10 +136,14 @@ def start_scrape(req: ScrapeRequest):
             python_exec = resolve_python_executable()
 
             cmd = [python_exec, "main_scrape_bios.py", "scrape-bios"]
+            env = os.environ.copy()
+            if req.the_key:
+                env["THE_KEY"] = req.the_key
             with open(log_path, "w", encoding="utf-8") as logf:
                 proc = subprocess.Popen(
                     cmd,
                     cwd=str(BACKEND_DIR),
+                    env=env,
                     stdout=logf,
                     stderr=subprocess.STDOUT,
                     stdin=subprocess.PIPE,
@@ -192,6 +201,8 @@ def start_run(req: RunRequest):
 
             env = os.environ.copy()
             env["TGT_LANG"] = req.tgt_lang
+            if req.the_key:
+                env["THE_KEY"] = req.the_key
 
             # Command: run multiple topics pipeline (non-interactive)
             cmd = [python_exec, "main_complete_analysis.py", "run-multiple-topics"]

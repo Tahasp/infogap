@@ -22,10 +22,17 @@ from packages.steps.info_diff_steps import load_other_client
 
 logger = loguru.logger
 config = dotenv_values(".env")
-key = config["THE_KEY"] 
+
+def get_api_key() -> str:
+    key = os.getenv("THE_KEY") or config.get("THE_KEY")
+    if not key:
+        raise ValueError("Missing THE_KEY in environment or .env file")
+    return key
 
 def load_tsvetshop_client():
-    key = config["THE_KEY"] 
+    key = os.getenv("TSVETSHOP_KEY") or config.get("TSVETSHOP_KEY")
+    if not key:
+        raise ValueError("Missing TSVETSHOP_KEY in environment or .env file")
     client = openai.AzureOpenAI(
             azure_endpoint="https://tsvetshop.openai.azure.com/",
             api_key=key,
@@ -137,7 +144,6 @@ def write_gpt_connotation_cache(lang_code, connotation_cache):
 # TODO: need to replace with the new version of the function from ipynb
 def step_caa_multi_sentence(en_fr_info_gaps, **kwargs):
     en_info_gap, fr_info_gap = en_fr_info_gaps
-    key = config["THE_KEY"] 
 
     # partial(ask_gpt_for_facts, OpenAI(api_key=key))
     def get_gpt_connotation_labels(info_gap_df, lang_code):
