@@ -1,0 +1,3 @@
+fastapi
+uvicorn[standard]
+# plus whatever your backend_api imports (requests, pydantic, etc.)
