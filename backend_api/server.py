@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 app = FastAPI()
 
 # Allow CORS for configured frontend origins (comma-separated), defaulting to local dev.
-default_origins = ["http://localhost:5173", "http://localhost:3000"]
+default_origins = ["http://localhost:5173", "http://localhost:3000",]
 extra_origins = os.environ.get("ALLOWED_ORIGINS", "")
 allowed_origins = default_origins + [o.strip() for o in extra_origins.split(",") if o.strip()]
 app.add_middleware(
